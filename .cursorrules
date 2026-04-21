@@ -1,0 +1,32 @@
+
+# OpporLink — Cursor Rules
+
+## Stack
+- Node.js + Express + TypeScript
+- Prisma ORM with PostgreSQL (Neon)
+- Zod for validation
+- Pino for logging
+- JWT auth (access + refresh tokens)
+- React Native + Expo (frontend)
+
+## Code style
+- All files in src/ use TypeScript
+- No .js extensions on imports (CommonJS mode)
+- Use async/await, never .then() chains
+- Controllers never import from other controllers
+- Models only contain Prisma queries, no business logic
+- Services contain all business logic
+- Always use the prisma instance from src/config/db
+- Always use the logger from src/config/logger
+- Always use the env object from src/config/env
+- Return consistent API responses using ApiResponse util
+- All routes use authenticate middleware for protected endpoints
+- All request bodies validated with Zod schemas before hitting controller
+- Soft delete pattern: set isDeleted=true, never hard delete posts/comments
+
+## File naming
+- Controllers: src/controllers/[feature].controller.ts
+- Routes: src/routes/[feature].routes.ts
+- Schemas: src/schemas/[feature].schema.ts
+- Models: src/models/[Model].ts
+- Services: src/services/[feature].service.ts

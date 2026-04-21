@@ -1,0 +1,637 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum Role {
+  MEMBER
+  MODERATOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ConnectionStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  BLOCKED
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  VOLUNTEER
+}
+
+enum JobStatus {
+  OPEN
+  CLOSED
+  DRAFT
+}
+
+enum ApplicationStatus {
+  APPLIED
+  REVIEWING
+  INTERVIEW
+  OFFERED
+  REJECTED
+  WITHDRAWN
+}
+
+enum NotificationType {
+  CONNECTION_REQUEST
+  CONNECTION_ACCEPTED
+  POST_LIKE
+  POST_COMMENT
+  JOB_APPLICATION
+  JOB_MATCH
+  PROFILE_VIEW
+  OPPORTUNITY_MATCH
+  OPPORTUNITY_EXPIRING
+  SYSTEM
+}
+
+enum OpportunityStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  EXPIRED
+  REJECTED
+  ARCHIVED
+}
+
+enum OpportunityCategory {
+  JOB
+  SCHOLARSHIP
+  FELLOWSHIP
+  INTERNSHIP
+  GRANT
+  COMPETITION
+  VOLUNTEER
+  OTHER
+}
+
+enum SourceType {
+  ADMIN
+  MODERATOR
+  SCRAPER
+  PARTNER
+}
+
+enum UserEventType {
+  VIEW_OPPORTUNITY
+  SAVE_OPPORTUNITY
+  UNSAVE_OPPORTUNITY
+  APPLY_OPPORTUNITY
+  CLICK_NOTIFICATION
+  SEARCH
+  VIEW_PROFILE
+}
+
+enum AuditAction {
+  CREATE_OPPORTUNITY
+  UPDATE_OPPORTUNITY
+  DELETE_OPPORTUNITY
+  APPROVE_OPPORTUNITY
+  REJECT_OPPORTUNITY
+  BAN_USER
+  UNBAN_USER
+  CHANGE_ROLE
+  DELETE_POST
+  DELETE_COMMENT
+  RESOLVE_REPORT
+  DISMISS_REPORT
+}
+
+enum ReportType {
+  POST
+  COMMENT
+  USER
+  JOB
+  OPPORTUNITY
+}
+
+enum ReportReason {
+  SPAM
+  HATE_SPEECH
+  MISINFORMATION
+  HARASSMENT
+  INAPPROPRIATE_CONTENT
+  SCAM
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+// ─────────────────────────────────────────
+// USER
+// ─────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(MEMBER)
+  isVerified   Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  isBanned     Boolean  @default(false)
+  banReason    String?
+  pushToken    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  refreshTokens       RefreshToken[]
+  profile             Profile?
+  posts               Post[]
+  comments            Comment[]
+  likes               Like[]
+  sentConnections     Connection[]             @relation("ConnectionSender")
+  receivedConnections Connection[]             @relation("ConnectionReceiver")
+  jobsPosted          Job[]                    @relation("JobPoster")
+  applications        Application[]
+  savedJobs           SavedJob[]
+  opportunitiesPosted Opportunity[]            @relation("OpportunityPoster")
+  opportunityReviewed Opportunity[]            @relation("OpportunityReviewer")
+  savedOpportunities  SavedOpportunity[]
+  opportunityApps     OpportunityApplication[]
+  interests           UserInterest[]
+  recommendations     Recommendation[]
+  events              UserEvent[]
+  notifications       Notification[]           @relation("NotificationRecipient")
+  triggered           Notification[]           @relation("NotificationTrigger")
+  reportsFiled        Report[]                 @relation("ReportFiler")
+  reportsResolved     Report[]                 @relation("ReportResolver")
+  reportsAgainst      Report[]                 @relation("ReportedUser")
+  auditLogsActed      AuditLog[]               @relation("AuditActor")
+  auditLogsTarget     AuditLog[]               @relation("AuditTarget")
+  pushTokenRecord     PushToken?               @relation("UserPushToken")
+
+  @@index([email])
+  @@index([role])
+}
+
+// ─────────────────────────────────────────
+// PUSH (Expo)
+// ─────────────────────────────────────────
+
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation("UserPushToken", fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([token])
+}
+
+// ─────────────────────────────────────────
+// AUTH
+// ─────────────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId  String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+// ─────────────────────────────────────────
+// PROFILE
+// ─────────────────────────────────────────
+
+model Profile {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName String
+  lastName  String
+  headline  String?
+  bio       String?
+  avatarUrl String?
+  bannerUrl String?
+  location  String?
+  website   String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  experiences Experience[]
+  educations  Education[]
+  skills      ProfileSkill[]
+
+  @@index([userId])
+}
+
+model Experience {
+  id          String    @id @default(uuid())
+  profileId   String
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title       String
+  company     String
+  location    String?
+  startDate   DateTime
+  endDate     DateTime?
+  description String?
+  createdAt   DateTime  @default(now())
+
+  @@index([profileId])
+}
+
+model Education {
+  id          String    @id @default(uuid())
+  profileId   String
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  school      String
+  degree      String?
+  field       String?
+  startDate   DateTime
+  endDate     DateTime?
+  description String?
+  createdAt   DateTime  @default(now())
+
+  @@index([profileId])
+}
+
+// ─────────────────────────────────────────
+// SKILLS + INTERESTS
+// ─────────────────────────────────────────
+
+model Skill {
+  id            String             @id @default(uuid())
+  name          String             @unique
+  profiles      ProfileSkill[]
+  opportunities OpportunitySkill[]
+}
+
+model ProfileSkill {
+  profileId String
+  skillId   String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skill     Skill   @relation(fields: [skillId],   references: [id], onDelete: Cascade)
+
+  @@id([profileId, skillId])
+}
+
+model Interest {
+  id    String         @id @default(uuid())
+  name  String         @unique
+  users UserInterest[]
+}
+
+model UserInterest {
+  userId     String
+  interestId String
+  user       User     @relation(fields: [userId],     references: [id], onDelete: Cascade)
+  interest   Interest @relation(fields: [interestId], references: [id], onDelete: Cascade)
+
+  @@id([userId, interestId])
+}
+
+// ─────────────────────────────────────────
+// CONNECTIONS
+// ─────────────────────────────────────────
+
+model Connection {
+  id         String           @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     ConnectionStatus @default(PENDING)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  sender   User @relation("ConnectionSender",   fields: [senderId],   references: [id], onDelete: Cascade)
+  receiver User @relation("ConnectionReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+// ─────────────────────────────────────────
+// POSTS, COMMENTS, LIKES
+// ─────────────────────────────────────────
+
+model Post {
+  id          String   @id @default(uuid())
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content     String
+  mediaUrls   String[] @default([])
+  isDeleted   Boolean  @default(false)
+  deletedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  comments Comment[]
+  likes    Like[]
+  reports  Report[]
+
+  @@index([authorId])
+  @@index([createdAt])
+  @@index([isDeleted])
+}
+
+model Comment {
+  id          String   @id @default(uuid())
+  postId      String
+  authorId    String
+  content     String
+  isDeleted   Boolean  @default(false)
+  deletedById String?
+  createdAt   DateTime @default(now())
+
+  post    Post     @relation(fields: [postId],   references: [id], onDelete: Cascade)
+  author  User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  reports Report[]
+
+  @@index([postId])
+}
+
+model Like {
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+}
+
+// ─────────────────────────────────────────
+// REPORTS
+// ─────────────────────────────────────────
+
+model Report {
+  id              String       @id @default(uuid())
+  filerId         String
+  type            ReportType
+  postId          String?
+  commentId       String?
+  reportedUserId  String?
+  jobId           String?
+  opportunityId   String?
+  reason          ReportReason
+  details         String?
+  status          ReportStatus @default(PENDING)
+  resolvedById    String?
+  resolvedAt      DateTime?
+  resolutionNote  String?
+  createdAt       DateTime     @default(now())
+
+  filer          User         @relation("ReportFiler",    fields: [filerId],        references: [id], onDelete: Cascade)
+  post           Post?        @relation(fields: [postId],                           references: [id], onDelete: SetNull)
+  comment        Comment?     @relation(fields: [commentId],                        references: [id], onDelete: SetNull)
+  reportedUser   User?        @relation("ReportedUser",   fields: [reportedUserId], references: [id], onDelete: SetNull)
+  job            Job?         @relation(fields: [jobId],                          references: [id], onDelete: SetNull)
+  opportunity    Opportunity? @relation(fields: [opportunityId],                 references: [id], onDelete: SetNull)
+  resolvedBy     User?        @relation("ReportResolver", fields: [resolvedById],   references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([type])
+  @@index([filerId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────
+// JOBS
+// ─────────────────────────────────────────
+
+model Job {
+  id           String    @id @default(uuid())
+  posterId     String
+  poster       User      @relation("JobPoster", fields: [posterId], references: [id], onDelete: Cascade)
+  title        String
+  company      String
+  location     String?
+  isRemote     Boolean   @default(false)
+  type         JobType   @default(FULL_TIME)
+  status       JobStatus @default(OPEN)
+  description  String
+  requirements String?
+  salary       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  applications Application[]
+  savedBy      SavedJob[]
+  reports      Report[]
+
+  @@index([posterId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Application {
+  id          String            @id @default(uuid())
+  jobId       String
+  applicantId String
+  status      ApplicationStatus @default(APPLIED)
+  coverLetter String?
+  resumeUrl   String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  job       Job  @relation(fields: [jobId],       references: [id], onDelete: Cascade)
+  applicant User @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, applicantId])
+  @@index([jobId])
+  @@index([applicantId])
+}
+
+model SavedJob {
+  userId    String
+  jobId     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId],  references: [id], onDelete: Cascade)
+
+  @@id([userId, jobId])
+}
+
+// ─────────────────────────────────────────
+// OPPORTUNITIES
+// ─────────────────────────────────────────
+
+model OpportunitySource {
+  id            String        @id @default(uuid())
+  name          String
+  type          SourceType
+  url           String?
+  createdAt     DateTime      @default(now())
+  opportunities Opportunity[]
+}
+
+model Opportunity {
+  id              String              @id @default(uuid())
+  posterId        String
+  reviewedById    String?
+  sourceId        String?
+  title           String
+  description     String
+  organisation    String
+  logoUrl         String?
+  blurhash        String?
+  category        OpportunityCategory
+  location        String?
+  isRemote        Boolean             @default(false)
+  experienceLevel String?
+  deadline        DateTime
+  applyUrl        String
+  status          OpportunityStatus   @default(DRAFT)
+  rejectionReason String?
+  salary          String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  poster          User               @relation("OpportunityPoster",   fields: [posterId],     references: [id])
+  reviewedBy      User?              @relation("OpportunityReviewer", fields: [reviewedById], references: [id])
+  source          OpportunitySource? @relation(fields: [sourceId],    references: [id])
+  skills          OpportunitySkill[]
+  savedBy         SavedOpportunity[]
+  applications    OpportunityApplication[]
+  recommendations Recommendation[]
+  events          UserEvent[]
+  reports         Report[]
+
+  @@index([posterId])
+  @@index([status])
+  @@index([category])
+  @@index([deadline])
+  @@index([createdAt])
+}
+
+model OpportunitySkill {
+  opportunityId String
+  skillId       String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  skill         Skill       @relation(fields: [skillId],       references: [id], onDelete: Cascade)
+
+  @@id([opportunityId, skillId])
+}
+
+model SavedOpportunity {
+  userId        String
+  opportunityId String
+  createdAt     DateTime    @default(now())
+
+  user        User        @relation(fields: [userId],        references: [id], onDelete: Cascade)
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@id([userId, opportunityId])
+}
+
+model OpportunityApplication {
+  id            String            @id @default(uuid())
+  userId        String
+  opportunityId String
+  status        ApplicationStatus @default(APPLIED)
+  coverNote     String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  user        User        @relation(fields: [userId],        references: [id], onDelete: Cascade)
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, opportunityId])
+  @@index([userId])
+  @@index([opportunityId])
+}
+
+// ─────────────────────────────────────────
+// RECOMMENDATIONS + EVENTS
+// ─────────────────────────────────────────
+
+model Recommendation {
+  userId        String
+  opportunityId String
+  score         Float
+  updatedAt     DateTime    @updatedAt
+
+  user        User        @relation(fields: [userId],        references: [id], onDelete: Cascade)
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@id([userId, opportunityId])
+  @@index([userId, score])
+}
+
+model UserEvent {
+  id            String        @id @default(uuid())
+  userId        String
+  opportunityId String?
+  type          UserEventType
+  metadata      Json?
+  createdAt     DateTime      @default(now())
+
+  user        User         @relation(fields: [userId],        references: [id], onDelete: Cascade)
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+
+  @@index([userId, type])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────
+
+model Notification {
+  id          String           @id @default(uuid())
+  recipientId String
+  triggerId   String?
+  type        NotificationType
+  entityId    String?
+  message     String?
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  recipient User  @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  trigger   User? @relation("NotificationTrigger",   fields: [triggerId],   references: [id], onDelete: SetNull)
+
+  @@index([recipientId])
+  @@index([isRead])
+}
+
+// ─────────────────────────────────────────
+// AUDIT LOG
+// ─────────────────────────────────────────
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  actorId    String
+  targetId   String?
+  action     AuditAction
+  entityId   String?
+  entityType String?
+  metadata   Json?
+  createdAt  DateTime    @default(now())
+
+  actor  User  @relation("AuditActor",  fields: [actorId],  references: [id])
+  target User? @relation("AuditTarget", fields: [targetId], references: [id])
+
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+}
