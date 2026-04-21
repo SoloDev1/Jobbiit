@@ -2,10 +2,11 @@
   "name": "opporlink-backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/app.js",
   "scripts": {
     "dev": "nodemon --exec tsx src/app.ts",
     "build": "tsc",
+    "postinstall": "npm run build",
     "start": "node dist/app.js",
     "migrate": "prisma migrate dev",
     "generate": "prisma generate",
@@ -14,7 +15,6 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
