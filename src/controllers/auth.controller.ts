@@ -1,11 +1,13 @@
 import type { Request, Response } from 'express'
 import { logger }      from '../config/logger'
 import { sendSuccess, sendCreated, sendError } from '../utils/apiResponse'
+import { prisma }      from '../config/db'
 import * as UserModel  from '../models/User'
 import * as TokenModel from '../models/RefreshToken'
 import { hashPassword, verifyPassword, DUMMY_HASH } from '../services/password.service'
 import {
   signAccess,
+  signRefresh,
   storeRefresh,
   rotateRefresh,
   validateStoredRefresh,
@@ -25,10 +27,29 @@ export async function signup(req: Request, res: Response): Promise<void> {
     return
   }
 
-  const passwordHash  = await hashPassword(password)
-  const user          = await UserModel.createUser(email, passwordHash)
-  const accessToken   = signAccess(user.id, user.role)
-  const refreshToken  = await storeRefresh(user.id)
+  const passwordHash = await hashPassword(password)
+
+  const user = await prisma.$transaction(async (tx) => {
+    const createdUser = await tx.user.create({
+      data: { email, passwordHash },
+      select: { id: true, email: true, role: true },
+    })
+
+    await tx.profile.create({
+      data: {
+        userId: createdUser.id,
+        firstName: 'New',
+        lastName: 'User',
+        headline: 'New member',
+      },
+      select: { id: true },
+    })
+
+    return createdUser
+  })
+
+  const accessToken  = signAccess(user.id, user.role)
+  const refreshToken = await storeRefresh(user.id)
 
   logger.info({ userId: user.id }, 'User signed up')
 
