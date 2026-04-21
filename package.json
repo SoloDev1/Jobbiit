@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon --exec tsx src/app.ts",
     "build": "tsc",
-    "postinstall": "npm run build",
+    "postinstall": "prisma generate && npm run build",
     "start": "node dist/app.js",
     "migrate": "prisma migrate dev",
     "generate": "prisma generate",
