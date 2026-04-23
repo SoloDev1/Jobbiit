@@ -44,6 +44,19 @@ export async function getProfileIdByUserId(userId: string): Promise<string | nul
   return row?.id ?? null
 }
 
+/** True when profile has a non-empty location and at least one skill (onboarding guard). */
+export async function profileMeetsOnboardingRequirements(userId: string): Promise<boolean> {
+  const row = await prisma.profile.findUnique({
+    where: { userId },
+    select: {
+      location: true,
+      _count: { select: { skills: true } },
+    },
+  })
+  if (!row) return false
+  return Boolean(row.location?.trim()) && row._count.skills > 0
+}
+
 export async function createProfile(
   userId: string,
   data: CreateProfileInput,

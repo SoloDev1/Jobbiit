@@ -1,10 +1,16 @@
 import type { Request, Response } from 'express'
+import type { Role } from '@prisma/client'
 import { logger }      from '../config/logger'
 import { sendSuccess, sendCreated, sendError } from '../utils/apiResponse'
 import { prisma }      from '../config/db'
+import { env }         from '../config/env'
 import * as UserModel  from '../models/User'
+import * as ProfileModel from '../models/Profile'
+import * as PasswordResetTokenModel from '../models/PasswordResetToken'
 import * as TokenModel from '../models/RefreshToken'
+import * as AccountService from '../services/account.service'
 import { hashPassword, verifyPassword, DUMMY_HASH } from '../services/password.service'
+import * as EmailService from '../services/email.service'
 import {
   signAccess,
   signRefresh,
@@ -13,6 +19,28 @@ import {
   validateStoredRefresh,
   verifyRefresh,
 } from '../services/token.service'
+import type {
+  ForgotPasswordInput,
+  ResetPasswordInput,
+  DeleteAccountInput,
+} from '../schemas/auth.schema'
+
+function userAuthPayload(u: {
+  id: string
+  email: string
+  role: Role
+  onboardingCompletedAt: Date | null
+}) {
+  return {
+    id:                   u.id,
+    email:                u.email,
+    role:                 u.role,
+    onboardingComplete: u.onboardingCompletedAt !== null,
+    ...(u.onboardingCompletedAt !== null && {
+      onboardingCompletedAt: u.onboardingCompletedAt.toISOString(),
+    }),
+  }
+}
 
 // ─── signup ───────────────────────────────────────────────────────────────────
 
@@ -32,7 +60,12 @@ export async function signup(req: Request, res: Response): Promise<void> {
   const user = await prisma.$transaction(async (tx) => {
     const createdUser = await tx.user.create({
       data: { email, passwordHash },
-      select: { id: true, email: true, role: true },
+      select: {
+        id:                     true,
+        email:                  true,
+        role:                   true,
+        onboardingCompletedAt:  true,
+      },
     })
 
     await tx.profile.create({
@@ -54,10 +87,14 @@ export async function signup(req: Request, res: Response): Promise<void> {
   logger.info({ userId: user.id }, 'User signed up')
 
   sendCreated(res, {
-    user:  { id: user.id, email: user.email, role: user.role },
+    user:        userAuthPayload(user),
     accessToken,
     refreshToken,
   }, 'Account created successfully')
+
+  void EmailService.sendWelcomeEmail(user.email).catch((err: unknown) => {
+    logger.error({ err, userId: user.id }, 'Welcome email failed')
+  })
 }
 
 // ─── login ────────────────────────────────────────────────────────────────────
@@ -90,7 +127,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   logger.info({ userId: user.id }, 'User logged in')
 
   sendSuccess(res, {
-    user:  { id: user.id, email: user.email, role: user.role },
+    user:        userAuthPayload(user),
     accessToken,
     refreshToken,
   }, 'Logged in successfully')
@@ -143,6 +180,145 @@ export async function refresh(req: Request, res: Response): Promise<void> {
     accessToken:  newAccessToken,
     refreshToken: newRefreshToken,
   }, 'Token refreshed successfully')
+}
+
+// ─── me ───────────────────────────────────────────────────────────────────────
+
+export async function me(req: Request, res: Response): Promise<void> {
+  const user = await UserModel.findById(req.user!.id)
+  if (!user || !user.isActive) {
+    sendError(res, 'Unauthorized', 401)
+    return
+  }
+
+  sendSuccess(res, { user: userAuthPayload(user) }, 'OK')
+}
+
+// ─── completeOnboarding ───────────────────────────────────────────────────────
+
+export async function completeOnboarding(req: Request, res: Response): Promise<void> {
+  const id = req.user!.id
+
+  const meets = await ProfileModel.profileMeetsOnboardingRequirements(id)
+  if (!meets) {
+    sendError(
+      res,
+      'Profile must have location and at least one skill before completing onboarding',
+      400,
+      'ONBOARDING_INCOMPLETE',
+    )
+    return
+  }
+
+  const at = await UserModel.completeOnboarding(id)
+  if (at === null) {
+    sendError(res, 'User not found', 404, 'NOT_FOUND')
+    return
+  }
+
+  sendSuccess(
+    res,
+    {
+      onboardingComplete:      true,
+      onboardingCompletedAt:   at.toISOString(),
+    },
+    'Onboarding completed successfully',
+  )
+}
+
+// ─── forgotPassword ───────────────────────────────────────────────────────────
+
+const FORGOT_PASSWORD_MESSAGE =
+  'If an account exists for that email, you will receive reset instructions shortly.'
+
+export async function forgotPassword(req: Request, res: Response): Promise<void> {
+  const { email } = req.body as ForgotPasswordInput
+
+  const user = await UserModel.findByEmailWithPassword(email)
+  await verifyPassword('ResetTimingNeutral1!', user?.passwordHash ?? DUMMY_HASH)
+
+  if (!user || !user.isActive) {
+    sendSuccess(res, null, FORGOT_PASSWORD_MESSAGE)
+    return
+  }
+
+  const { raw } = await PasswordResetTokenModel.createForUser(user.id)
+  const base = env.PASSWORD_RESET_URL_BASE.trim()
+  const resetLink = base
+    ? `${base.replace(/\/$/, '')}?token=${encodeURIComponent(raw)}`
+    : null
+
+  void EmailService.sendPasswordResetEmail(user.email, {
+    resetLink,
+    rawToken: resetLink ? undefined : raw,
+  }).catch((err: unknown) => {
+    logger.error({ err, userId: user.id }, 'Password reset email failed')
+  })
+
+  sendSuccess(res, null, FORGOT_PASSWORD_MESSAGE)
+}
+
+// ─── resetPassword ───────────────────────────────────────────────────────────
+
+export async function resetPassword(req: Request, res: Response): Promise<void> {
+  const { token, password } = req.body as ResetPasswordInput
+
+  const userId = await PasswordResetTokenModel.consumeAndGetUserId(token)
+  if (!userId) {
+    sendError(res, 'Invalid or expired reset link', 400, 'INVALID_RESET_TOKEN')
+    return
+  }
+
+  const passwordHash = await hashPassword(password)
+  await UserModel.updatePasswordHash(userId, passwordHash)
+  await TokenModel.deleteAllForUser(userId)
+
+  logger.info({ userId }, 'Password reset completed')
+
+  sendSuccess(res, null, 'Password updated successfully. Please sign in again.')
+}
+
+// ─── deleteAccount ───────────────────────────────────────────────────────────
+
+export async function deleteAccount(req: Request, res: Response): Promise<void> {
+  const { password } = req.body as DeleteAccountInput
+  const id = req.user!.id
+
+  const user = await UserModel.findByIdWithPassword(id)
+  if (!user || !user.isActive) {
+    sendError(res, 'Unauthorized', 401)
+    return
+  }
+
+  const passwordValid = await verifyPassword(password, user.passwordHash)
+  if (!passwordValid) {
+    sendError(res, 'Invalid password', 401, 'INVALID_PASSWORD')
+    return
+  }
+
+  await TokenModel.deleteAllForUser(id)
+  await UserModel.deleteUser(id)
+
+  logger.info({ userId: id }, 'User account deleted (data export / store compliance)')
+
+  sendSuccess(res, null, 'Account deleted successfully')
+}
+
+// ─── exportAccountData ───────────────────────────────────────────────────────
+
+export async function exportAccountData(req: Request, res: Response): Promise<void> {
+  const id = req.user!.id
+  const account = await AccountService.buildAccountDataExport(id)
+  if (!account) {
+    sendError(res, 'User not found', 404, 'NOT_FOUND')
+    return
+  }
+
+  sendSuccess(
+    res,
+    { exportedAt: new Date().toISOString(), account },
+    'Personal data export',
+  )
 }
 
 // ─── logout ───────────────────────────────────────────────────────────────────

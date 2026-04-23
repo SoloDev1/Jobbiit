@@ -148,10 +148,11 @@ model User {
   isVerified   Boolean  @default(false)
   isActive     Boolean  @default(true)
   isBanned     Boolean  @default(false)
-  banReason    String?
-  pushToken    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  banReason               String?
+  pushToken               String?
+  onboardingCompletedAt DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   refreshTokens       RefreshToken[]
   profile             Profile?
@@ -178,6 +179,7 @@ model User {
   auditLogsActed      AuditLog[]               @relation("AuditActor")
   auditLogsTarget     AuditLog[]               @relation("AuditTarget")
   pushTokenRecord     PushToken?               @relation("UserPushToken")
+  passwordResetTokens PasswordResetToken[]
 
   @@index([email])
   @@index([role])
@@ -214,6 +216,17 @@ model RefreshToken {
 
   @@index([userId])
   @@index([token])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 // ─────────────────────────────────────────
@@ -507,8 +520,8 @@ model Opportunity {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  poster          User               @relation("OpportunityPoster",   fields: [posterId],     references: [id])
-  reviewedBy      User?              @relation("OpportunityReviewer", fields: [reviewedById], references: [id])
+  poster          User               @relation("OpportunityPoster",   fields: [posterId],     references: [id], onDelete: Cascade)
+  reviewedBy      User?              @relation("OpportunityReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   source          OpportunitySource? @relation(fields: [sourceId],    references: [id])
   skills          OpportunitySkill[]
   savedBy         SavedOpportunity[]
@@ -628,8 +641,8 @@ model AuditLog {
   metadata   Json?
   createdAt  DateTime    @default(now())
 
-  actor  User  @relation("AuditActor",  fields: [actorId],  references: [id])
-  target User? @relation("AuditTarget", fields: [targetId], references: [id])
+  actor  User  @relation("AuditActor",  fields: [actorId],  references: [id], onDelete: Cascade)
+  target User? @relation("AuditTarget", fields: [targetId], references: [id], onDelete: SetNull)
 
   @@index([actorId])
   @@index([action])

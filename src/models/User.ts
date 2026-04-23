@@ -12,11 +12,16 @@ export interface PublicUser {
 }
 
 export interface PublicUserWithTimestamp extends PublicUser {
-  createdAt: Date
+  createdAt:               Date
+  onboardingCompletedAt:   Date | null
 }
 
 export interface UserWithPassword extends PublicUser {
   passwordHash: string
+}
+
+export interface UserWithPasswordAndOnboarding extends UserWithPassword {
+  onboardingCompletedAt: Date | null
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -38,15 +43,16 @@ export async function findByEmail(email: string): Promise<PublicUser | null> {
  */
 export async function findByEmailWithPassword(
   email: string,
-): Promise<UserWithPassword | null> {
+): Promise<UserWithPasswordAndOnboarding | null> {
   return prisma.user.findUnique({
     where:  { email },
     select: {
-      id:           true,
-      email:        true,
-      passwordHash: true,
-      role:         true,
-      isActive:     true,
+      id:                     true,
+      email:                  true,
+      passwordHash:           true,
+      role:                   true,
+      isActive:               true,
+      onboardingCompletedAt:  true,
     },
   })
 }
@@ -61,11 +67,12 @@ export async function findById(
   return prisma.user.findUnique({
     where:  { id },
     select: {
-      id:        true,
-      email:     true,
-      role:      true,
-      isActive:  true,
-      createdAt: true,
+      id:                     true,
+      email:                  true,
+      role:                   true,
+      isActive:               true,
+      createdAt:              true,
+      onboardingCompletedAt:  true,
     },
   })
 }
@@ -80,11 +87,61 @@ export async function createUser(
   return prisma.user.create({
     data:   { email, passwordHash },
     select: {
-      id:        true,
-      email:     true,
-      role:      true,
-      isActive:  true,
-      createdAt: true,
+      id:                     true,
+      email:                  true,
+      role:                   true,
+      isActive:               true,
+      createdAt:              true,
+      onboardingCompletedAt:  true,
     },
   })
+}
+
+/**
+ * Marks onboarding complete. Idempotent: returns existing timestamp if already set.
+ */
+export async function completeOnboarding(userId: string): Promise<Date | null> {
+  const existing = await prisma.user.findUnique({
+    where:  { id: userId },
+    select: { onboardingCompletedAt: true },
+  })
+  if (!existing) return null
+  if (existing.onboardingCompletedAt) return existing.onboardingCompletedAt
+
+  const updated = await prisma.user.update({
+    where:  { id: userId },
+    data:   { onboardingCompletedAt: new Date() },
+    select: { onboardingCompletedAt: true },
+  })
+  return updated.onboardingCompletedAt
+}
+
+/**
+ * Auth-only. Used for account deletion after password confirmation.
+ */
+export async function findByIdWithPassword(
+  id: string,
+): Promise<UserWithPasswordAndOnboarding | null> {
+  return prisma.user.findUnique({
+    where:  { id },
+    select: {
+      id:                     true,
+      email:                  true,
+      passwordHash:           true,
+      role:                   true,
+      isActive:               true,
+      onboardingCompletedAt:  true,
+    },
+  })
+}
+
+export async function updatePasswordHash(userId: string, passwordHash: string): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data:  { passwordHash },
+  })
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  await prisma.user.delete({ where: { id: userId } })
 }

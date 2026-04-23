@@ -30,6 +30,21 @@ const schema = z.object({
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .optional(),
+
+  /** Resend API key (`re_...`). If empty, outbound email is skipped (dev-friendly). */
+  RESEND_API_KEY: z.string().optional().default(''),
+  /**
+   * Sender shown to recipients, e.g. `OpporLink <onboarding@resend.dev>` for Resend tests
+   * or your verified domain address in production.
+   */
+  EMAIL_FROM: z.string().min(1).default('OpporLink <onboarding@resend.dev>'),
+
+  /**
+   * Web or universal-link base for password reset, without query string.
+   * Example: `https://app.opporlink.com/auth/reset-password` — we append `?token=...`.
+   * If empty, the reset email includes the raw token for in-app entry (mobile).
+   */
+  PASSWORD_RESET_URL_BASE: z.string().optional().default(''),
 })
 
 const parsed = schema.safeParse(process.env)

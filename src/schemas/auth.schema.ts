@@ -6,6 +6,14 @@ import { z } from 'zod'
 const PASSWORD_REQUIREMENTS =
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).+$/
 
+const signupPasswordField = z
+  .string()
+  .min(8,  'Password does not meet requirements')
+  .max(72, 'Password does not meet requirements')
+  .refine((val) => PASSWORD_REQUIREMENTS.test(val), {
+    message: 'Password does not meet requirements',
+  })
+
 export const signupSchema = z
   .object({
     email: z
@@ -14,14 +22,7 @@ export const signupSchema = z
       .toLowerCase()
       .email('Invalid email address'),
 
-    password: z
-      .string()
-      .min(8,  'Password does not meet requirements')
-      // bcrypt silently truncates at 72 bytes — enforce the limit explicitly
-      .max(72, 'Password does not meet requirements')
-      .refine((val) => PASSWORD_REQUIREMENTS.test(val), {
-        message: 'Password does not meet requirements',
-      }),
+    password: signupPasswordField,
   })
   .strict()
 
@@ -45,6 +46,28 @@ export const refreshSchema = z
   })
   .strict()
 
+export const forgotPasswordSchema = z
+  .object({
+    email: z.string().trim().toLowerCase().email('Invalid email address'),
+  })
+  .strict()
+
+export const resetPasswordSchema = z
+  .object({
+    token:    z.string().min(1, 'Token is required'),
+    password: signupPasswordField,
+  })
+  .strict()
+
+export const deleteAccountSchema = z
+  .object({
+    password: z.string().min(1, 'Password is required'),
+  })
+  .strict()
+
 export type SignupInput  = z.infer<typeof signupSchema>
 export type LoginInput   = z.infer<typeof loginSchema>
 export type RefreshInput = z.infer<typeof refreshSchema>
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>
