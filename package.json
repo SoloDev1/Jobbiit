@@ -10,6 +10,7 @@
     "start": "npx prisma migrate deploy && node dist/app.js",
     "migrate": "prisma migrate dev",
     "generate": "prisma generate",
+    "make-super-admin": "tsx src/scripts/make-super-admin.ts",
     "test": "vitest"
   },
   "keywords": [],
