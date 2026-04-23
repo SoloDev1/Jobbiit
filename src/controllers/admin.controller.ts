@@ -7,8 +7,9 @@ import {
   pendingReportsQuerySchema,
   type ResolveReportInput,
 } from '../schemas/report.schema'
-import type { AdminManualPushInput } from '../schemas/admin.schema'
+import type { AdminManualPushInput, AdminInAppNotificationInput } from '../schemas/admin.schema'
 import * as PushService from '../services/push.service'
+import * as NotificationModel from '../models/Notification'
 
 const uuidParam = z.string().uuid()
 
@@ -95,5 +96,43 @@ export async function sendManualPush(req: Request, res: Response): Promise<void>
     res,
     { recipientUserCount: userIds.length },
     'Push sent to registered devices for the given users',
+  )
+}
+
+// ─── sendInAppNotification ─────────────────────────────────────────────────────
+
+export async function sendInAppNotification(req: Request, res: Response): Promise<void> {
+  const { title, body, userIds, sendPush, entityId } = req.body as AdminInAppNotificationInput
+
+  const message = `${title}\n\n${body}`.trim()
+
+  const created = await Promise.all(
+    userIds.map((recipientId) =>
+      NotificationModel.createNotification(
+        recipientId,
+        'SYSTEM',
+        message,
+        entityId,
+        userId(req),
+      ),
+    ),
+  )
+
+  if (sendPush) {
+    await PushService.sendPushToUsers(userIds, title, body, {
+      kind: 'SYSTEM',
+      entityId: entityId ?? null,
+    })
+  }
+
+  logger.info(
+    { actorId: userId(req), recipientCount: userIds.length, sendPush: !!sendPush, entityId },
+    'Admin in-app notification dispatched',
+  )
+
+  sendSuccess(
+    res,
+    { recipientUserCount: userIds.length, notificationIds: created.map((c) => c.id) },
+    'In-app notifications created',
   )
 }
