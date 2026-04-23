@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/authenticate'
 import { authorize }    from '../middleware/authorize'
 import { validate }     from '../middleware/validate'
 import { resolveReportSchema } from '../schemas/report.schema'
+import { adminManualPushSchema } from '../schemas/admin.schema'
 import * as AdminController from '../controllers/admin.controller'
 
 const router = Router()
@@ -10,6 +11,13 @@ const router = Router()
 router.use(authenticate)
 
 router.get('/stats', authorize('ADMIN'), AdminController.getStats)
+
+router.post(
+  '/push/send',
+  authorize('ADMIN', 'SUPER_ADMIN'),
+  validate(adminManualPushSchema),
+  AdminController.sendManualPush,
+)
 
 router.get(
   '/reports',

@@ -7,6 +7,8 @@ import {
   pendingReportsQuerySchema,
   type ResolveReportInput,
 } from '../schemas/report.schema'
+import type { AdminManualPushInput } from '../schemas/admin.schema'
+import * as PushService from '../services/push.service'
 
 const uuidParam = z.string().uuid()
 
@@ -75,4 +77,23 @@ export async function dismissReport(req: Request, res: Response): Promise<void> 
 export async function getStats(_req: Request, res: Response): Promise<void> {
   const stats = await ReportModel.getAdminStats()
   sendSuccess(res, stats, 'Stats')
+}
+
+// ─── sendManualPush ───────────────────────────────────────────────────────────
+
+export async function sendManualPush(req: Request, res: Response): Promise<void> {
+  const { title, body, userIds, data } = req.body as AdminManualPushInput
+
+  await PushService.sendPushToUsers(userIds, title, body, data)
+
+  logger.info(
+    { actorId: userId(req), recipientCount: userIds.length, title },
+    'Admin manual push dispatched',
+  )
+
+  sendSuccess(
+    res,
+    { recipientUserCount: userIds.length },
+    'Push sent to registered devices for the given users',
+  )
 }
