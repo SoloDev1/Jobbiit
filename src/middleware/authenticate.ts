@@ -58,6 +58,11 @@ export async function authenticate(
     return
   }
 
+  if (user.isBanned) {
+    sendError(res, 'Your account has been suspended', 403, 'ACCOUNT_BANNED')
+    return
+  }
+
   req.user = { id: user.id, role: user.role }
   next()
 }
