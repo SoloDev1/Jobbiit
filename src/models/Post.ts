@@ -364,3 +364,108 @@ export async function deleteComment(
   })
   return true
 }
+
+// ─── Admin: list all posts ────────────────────────────────────────────────────
+
+export type AdminPost = {
+  id:          string
+  authorId:    string
+  content:     string
+  mediaUrls:   string[]
+  isDeleted:   boolean
+  deletedById: string | null
+  createdAt:   Date
+  updatedAt:   Date
+  author: {
+    id:    string
+    email: string
+    profile: {
+      firstName: string
+      lastName:  string
+      avatarUrl: string | null
+    } | null
+  }
+  _count: { likes: number; comments: number }
+}
+
+export async function adminListPosts(
+  cursor?:        string,
+  limit:          number = 20,
+  includeDeleted: boolean = true,
+): Promise<{ posts: AdminPost[]; nextCursor: string | null }> {
+  const take = limit + 1
+
+  let cursorDecoded: { createdAt: Date; id: string } | undefined
+  if (cursor) {
+    const d = decodeCursor(cursor)
+    if (!d) return { posts: [], nextCursor: null }
+    cursorDecoded = d
+  }
+
+  const where: Prisma.PostWhereInput = {
+    ...(includeDeleted ? {} : { isDeleted: false }),
+    ...(cursorDecoded
+      ? {
+          OR: [
+            { createdAt: { lt: cursorDecoded.createdAt } },
+            {
+              AND: [
+                { createdAt: cursorDecoded.createdAt },
+                { id: { lt: cursorDecoded.id } },
+              ],
+            },
+          ],
+        }
+      : {}),
+  }
+
+  const rows = await prisma.post.findMany({
+    where,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take,
+    include: {
+      author: {
+        select: {
+          id:      true,
+          email:   true,
+          profile: { select: { firstName: true, lastName: true, avatarUrl: true } },
+        },
+      },
+      _count: {
+        select: {
+          likes:    true,
+          comments: { where: { isDeleted: false } },
+        },
+      },
+    },
+  })
+
+  const hasMore    = rows.length > limit
+  const slice      = hasMore ? rows.slice(0, limit) : rows
+  const last       = slice[slice.length - 1]
+  const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null
+
+  return { posts: slice as unknown as AdminPost[], nextCursor }
+}
+
+// ─── Admin: restore soft-deleted post ────────────────────────────────────────
+
+export async function restorePost(
+  postId:  string,
+  actorId: string,
+): Promise<'restored' | 'not_found' | 'not_deleted'> {
+  const post = await prisma.post.findUnique({
+    where:  { id: postId },
+    select: { id: true, isDeleted: true },
+  })
+  if (!post) return 'not_found'
+  if (!post.isDeleted) return 'not_deleted'
+
+  await prisma.post.update({
+    where: { id: postId },
+    data:  { isDeleted: false, deletedById: null },
+  })
+
+  void actorId
+  return 'restored'
+}
