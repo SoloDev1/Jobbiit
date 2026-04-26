@@ -64,7 +64,7 @@ export type AdminListUsersQuery = z.infer<typeof adminListUsersQuerySchema>
 export const adminListPostsQuerySchema = z.object({
   cursor:         z.string().optional(),
   limit:          z.coerce.number().int().positive().max(100).default(20),
-  includeDeleted: z.enum(['true', 'false']).transform((v) => v === 'true').default('true'),
+  includeDeleted: z.enum(['true', 'false']).transform((v) => v === 'true').default(true),
 })
 
 export type AdminListPostsQuery = z.infer<typeof adminListPostsQuerySchema>

@@ -1,5 +1,6 @@
 import { prisma } from '../config/db'
-import type { AuditAction, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import type { AuditAction } from '@prisma/client'
 
 // ─── Write ────────────────────────────────────────────────────────────────────
 
