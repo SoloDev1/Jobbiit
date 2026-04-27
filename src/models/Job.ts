@@ -386,3 +386,35 @@ export async function getSavedJobs(userId: string): Promise<{ savedAt: Date; job
     job:     mapJob(r.job as unknown as Parameters<typeof mapJob>[0], userId) as unknown as JobDetail,
   }))
 }
+
+// ─── attachSkills / detachSkill ───────────────────────────────────────────────
+
+export async function attachSkills(
+  jobId:    string,
+  actorId:  string,
+  skillIds: string[],
+): Promise<{ skillIds: string[] } | 'not_found' | 'forbidden'> {
+  const job = await prisma.job.findUnique({ where: { id: jobId }, select: { posterId: true } })
+  if (!job) return 'not_found'
+  if (job.posterId !== actorId) return 'forbidden'
+
+  await prisma.jobSkill.createMany({
+    data:           skillIds.map((skillId) => ({ jobId, skillId })),
+    skipDuplicates: true,
+  })
+
+  const rows = await prisma.jobSkill.findMany({ where: { jobId }, select: { skillId: true } })
+  return { skillIds: rows.map((r) => r.skillId) }
+}
+
+export async function detachSkill(
+  jobId:   string,
+  actorId: string,
+  skillId: string,
+): Promise<void | 'not_found' | 'forbidden'> {
+  const job = await prisma.job.findUnique({ where: { id: jobId }, select: { posterId: true } })
+  if (!job) return 'not_found'
+  if (job.posterId !== actorId) return 'forbidden'
+
+  await prisma.jobSkill.deleteMany({ where: { jobId, skillId } })
+}

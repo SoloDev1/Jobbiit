@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { logger } from '../config/logger'
 import { sendSuccess, sendCreated, sendNoContent, sendError } from '../utils/apiResponse'
@@ -27,6 +28,7 @@ import {
 } from '../schemas/admin.schema'
 import * as PushService from '../services/push.service'
 import * as NotificationModel from '../models/Notification'
+import * as UploadService from '../services/upload.service'
 
 const uuidParam = z.string().uuid()
 
@@ -271,6 +273,28 @@ export async function changeUserRole(req: Request, res: Response): Promise<void>
 }
 
 // ─── Post management ──────────────────────────────────────────────────────────
+
+export async function adminUploadPostMedia(req: Request, res: Response): Promise<void> {
+  const files = req.files as Express.Multer.File[] | undefined
+  if (!files || files.length === 0) {
+    sendError(res, 'At least one image file is required', 400, 'FILE_REQUIRED')
+    return
+  }
+
+  const urls = await Promise.all(
+    files.map((file) =>
+      UploadService.uploadImage(
+        file.buffer,
+        'opporlink/posts',
+        `${actorId(req)}-${randomUUID()}`,
+        file.mimetype,
+      ),
+    ),
+  )
+
+  logger.info({ actorId: actorId(req), count: urls.length }, 'Admin post media uploaded')
+  sendSuccess(res, { urls }, 'Media uploaded')
+}
 
 export async function adminListPosts(req: Request, res: Response): Promise<void> {
   const parsed = adminListPostsQuerySchema.safeParse(req.query)
