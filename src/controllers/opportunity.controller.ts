@@ -7,6 +7,7 @@ import {
   sendError,
 } from '../utils/apiResponse'
 import * as OppModel from '../models/Opportunity'
+import { notifyOpportunityMatch } from '../services/notification.service'
 import {
   opportunitiesQuerySchema,
   type CreateOpportunityInput,
@@ -165,6 +166,10 @@ export async function approveOpportunity(req: Request, res: Response): Promise<v
     sendError(res, 'Opportunity not found', 404, 'NOT_FOUND')
     return
   }
+
+  void notifyOpportunityMatch(result.id, result.title).catch((err: unknown) => {
+    logger.error({ err, opportunityId: result.id }, 'notifyOpportunityMatch failed')
+  })
 
   logger.info({ userId: userId(req), opportunityId: parsed.data }, 'Opportunity approved')
   sendSuccess(res, result, 'Opportunity approved and published')

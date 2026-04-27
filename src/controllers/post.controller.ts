@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import type { Role } from '@prisma/client'
 import { logger } from '../config/logger'
@@ -10,6 +11,7 @@ import {
 } from '../utils/apiResponse'
 import * as PostModel from '../models/Post'
 import { notifyNewPost, createNotification } from '../services/notification.service'
+import * as UploadService from '../services/upload.service'
 import {
   feedQuerySchema,
   type CreatePostInput,
@@ -50,6 +52,30 @@ export async function getFeed(req: Request, res: Response): Promise<void> {
   const { posts, nextCursor } = await PostModel.getFeed(userId(req), cursor, limit)
 
   sendSuccess(res, { posts, nextCursor }, 'Feed loaded')
+}
+
+// ─── uploadPostMedia ─────────────────────────────────────────────────────────
+
+export async function uploadPostMedia(req: Request, res: Response): Promise<void> {
+  const files = req.files as Express.Multer.File[] | undefined
+  if (!files || files.length === 0) {
+    sendError(res, 'At least one image file is required', 400, 'FILE_REQUIRED')
+    return
+  }
+
+  const urls = await Promise.all(
+    files.map((file) =>
+      UploadService.uploadImage(
+        file.buffer,
+        'opporlink/posts',
+        `${userId(req)}-${randomUUID()}`,
+        file.mimetype,
+      ),
+    ),
+  )
+
+  logger.info({ userId: userId(req), count: urls.length }, 'Post media uploaded')
+  sendSuccess(res, { urls }, 'Media uploaded')
 }
 
 // ─── createPost ──────────────────────────────────────────────────────────────

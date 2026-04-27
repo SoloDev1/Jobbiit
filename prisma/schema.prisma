@@ -295,6 +295,7 @@ model Skill {
   name          String             @unique
   profiles      ProfileSkill[]
   opportunities OpportunitySkill[]
+  jobs          JobSkill[]
 }
 
 model ProfileSkill {
@@ -450,10 +451,20 @@ model Job {
   applications Application[]
   savedBy      SavedJob[]
   reports      Report[]
+  skills       JobSkill[]
 
   @@index([posterId])
   @@index([status])
   @@index([createdAt])
+}
+
+model JobSkill {
+  jobId   String
+  skillId String
+  job     Job   @relation(fields: [jobId],   references: [id], onDelete: Cascade)
+  skill   Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, skillId])
 }
 
 model Application {

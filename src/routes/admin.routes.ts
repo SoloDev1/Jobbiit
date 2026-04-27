@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authenticate } from '../middleware/authenticate'
 import { authorize }    from '../middleware/authorize'
 import { validate }     from '../middleware/validate'
+import { uploadPostFiles } from '../middleware/upload'
 import { resolveReportSchema } from '../schemas/report.schema'
 import {
   adminManualPushSchema,
@@ -60,6 +61,13 @@ router.get(
   '/posts',
   authorize('ADMIN', 'SUPER_ADMIN', 'MODERATOR'),
   AdminController.adminListPosts,
+)
+
+router.post(
+  '/posts/media/upload',
+  authorize('ADMIN', 'SUPER_ADMIN'),
+  uploadPostFiles,
+  AdminController.adminUploadPostMedia,
 )
 
 router.post(
