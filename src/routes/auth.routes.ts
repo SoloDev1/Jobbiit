@@ -1,7 +1,8 @@
+// routes/auth.routes.ts
 import { Router } from 'express'
-import { authLimiter }   from '../middleware/rateLimiter'
-import { authenticate }  from '../middleware/authenticate'
-import { validate }      from '../middleware/validate'
+import { strictAuthLimiter, sessionLimiter } from '../middleware/rateLimiter'
+import { authenticate } from '../middleware/authenticate'
+import { validate } from '../middleware/validate'
 import {
   signupSchema,
   loginSchema,
@@ -14,16 +15,22 @@ import * as AuthController from '../controllers/auth.controller'
 
 const router = Router()
 
-// authLimiter is applied to /signup, /login, and /refresh — not /logout.
-// /refresh gets rate-limited to prevent brute-force token rotation attacks.
-router.post('/signup',  authLimiter, validate(signupSchema),  AuthController.signup)
-router.post('/login',   authLimiter, validate(loginSchema),   AuthController.login)
-router.post('/refresh', authLimiter, validate(refreshSchema), AuthController.refresh)
-router.post('/logout',               validate(refreshSchema), AuthController.logout)
+// ─── SENSITIVE ENDPOINTS ──────────────────────────────────────────────────
+// Uses strict limiter to prevent brute force
+router.post('/signup', strictAuthLimiter, validate(signupSchema), AuthController.signup)
+router.post('/login',  strictAuthLimiter, validate(loginSchema),  AuthController.login)
 
-router.post('/password/forgot', authLimiter, validate(forgotPasswordSchema), AuthController.forgotPassword)
-router.post('/password/reset',  authLimiter, validate(resetPasswordSchema), AuthController.resetPassword)
+router.post('/password/forgot', strictAuthLimiter, validate(forgotPasswordSchema), AuthController.forgotPassword)
+router.post('/password/reset',  strictAuthLimiter, validate(resetPasswordSchema),  AuthController.resetPassword)
 
+// ─── SESSION ENDPOINTS ────────────────────────────────────────────────────
+// Uses session limiter (higher limit) so background refreshes don't lock the user out
+router.post('/refresh', sessionLimiter, validate(refreshSchema), AuthController.refresh)
+
+// Logout doesn't need a rate limiter (you want users to be able to leave!)
+router.post('/logout', validate(refreshSchema), AuthController.logout)
+
+// ─── AUTHENTICATED ENDPOINTS ──────────────────────────────────────────────
 router.get('/me', authenticate, AuthController.me)
 router.post('/onboarding/complete', authenticate, AuthController.completeOnboarding)
 router.get('/account/data-export', authenticate, AuthController.exportAccountData)

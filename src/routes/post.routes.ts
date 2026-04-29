@@ -1,4 +1,4 @@
-import { socialActionLimiter } from './../middleware/rateLimiter';
+import { socialActionLimiter } from '../middleware/rateLimiter';
 import { Router } from 'express'
 import { authenticate } from '../middleware/authenticate'
 import { validate } from '../middleware/validate'
