@@ -30,6 +30,8 @@ router.post('/refresh', sessionLimiter, validate(refreshSchema), AuthController.
 // Logout doesn't need a rate limiter (you want users to be able to leave!)
 router.post('/logout', validate(refreshSchema), AuthController.logout)
 
+// Updates
+
 // ─── AUTHENTICATED ENDPOINTS ──────────────────────────────────────────────
 router.get('/me', authenticate, AuthController.me)
 router.post('/onboarding/complete', authenticate, AuthController.completeOnboarding)
