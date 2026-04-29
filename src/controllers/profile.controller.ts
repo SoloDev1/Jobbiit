@@ -26,20 +26,31 @@ function userId(req: Request): string {
 
 // ─── getProfile ───────────────────────────────────────────────────────────────
 
+// controllers/profile.controller.ts
+
 export async function getProfile(req: Request, res: Response): Promise<void> {
-  const parsed = uuidParam.safeParse(req.params.userId)
+  // If req.params.userId is missing (as it is in the /me route),
+  // fallback to the authenticated user's ID.
+  const idToFetch = req.params.userId || req.user?.id;
+
+  if (!idToFetch) {
+    sendError(res, 'User identity not found', 400, 'MISSING_ID');
+    return;
+  }
+
+  const parsed = uuidParam.safeParse(idToFetch);
   if (!parsed.success) {
-    sendError(res, 'Invalid user id', 400, 'INVALID_USER_ID')
-    return
+    sendError(res, 'Invalid user id', 400, 'INVALID_USER_ID');
+    return;
   }
 
-  const profile = await ProfileModel.getProfileByUserId(parsed.data)
+  const profile = await ProfileModel.getProfileByUserId(parsed.data);
   if (!profile) {
-    sendError(res, 'Profile not found', 404, 'NOT_FOUND')
-    return
+    sendError(res, 'Profile not found', 404, 'NOT_FOUND');
+    return;
   }
 
-  sendSuccess(res, profile, 'Profile loaded')
+  sendSuccess(res, profile, 'Profile loaded');
 }
 
 // ─── createProfile ────────────────────────────────────────────────────────────
