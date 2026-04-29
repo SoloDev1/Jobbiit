@@ -1,3 +1,4 @@
+import { socialActionLimiter } from './../middleware/rateLimiter';
 import { Router } from 'express'
 import { authenticate } from '../middleware/authenticate'
 import { validate } from '../middleware/validate'
@@ -15,6 +16,7 @@ router.get('/feed', PostController.getFeed)
 router.post('/', validate(createPostSchema), PostController.createPost)
 router.get('/:id', PostController.getPostById)
 router.delete('/:id', PostController.deletePost)
+router.post('/:id/like', socialActionLimiter, PostController.toggleLike)
 router.post('/:id/like', PostController.toggleLike)
 router.post(
   '/:id/comments',
