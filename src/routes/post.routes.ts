@@ -1,8 +1,7 @@
+import { socialActionLimiter } from './../middleware/rateLimiter';
 import { Router } from 'express'
 import { authenticate } from '../middleware/authenticate'
-import { authorize }    from '../middleware/authorize'
 import { validate } from '../middleware/validate'
-import { uploadPostFiles } from '../middleware/upload'
 import {
   createPostSchema,
   createCommentSchema,
@@ -14,11 +13,10 @@ const router = Router()
 router.use(authenticate)
 
 router.get('/feed', PostController.getFeed)
-router.post('/media/upload', authorize('ADMIN', 'SUPER_ADMIN', 'MODERATOR'), uploadPostFiles, PostController.uploadPostMedia)
-router.post('/', authorize('ADMIN', 'SUPER_ADMIN', 'MODERATOR'), validate(createPostSchema), PostController.createPost)
+router.post('/', validate(createPostSchema), PostController.createPost)
 router.get('/:id', PostController.getPostById)
 router.delete('/:id', PostController.deletePost)
-router.post('/:id/like', PostController.toggleLike)
+router.post('/:id/like', socialActionLimiter, PostController.toggleLike)
 router.post(
   '/:id/comments',
   validate(createCommentSchema),
