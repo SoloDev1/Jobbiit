@@ -12,6 +12,7 @@ router.get('/suggestions', ConnectionController.getSuggestions)
 router.get('/',            ConnectionController.getConnections)
 
 router.post('/request/:userId',       ConnectionController.sendRequest)
+// Connect
 router.post('/accept/:connectionId',  ConnectionController.acceptConnection)
 router.post('/decline/:connectionId', ConnectionController.declineConnection)
 router.delete('/:connectionId',       ConnectionController.removeConnection)

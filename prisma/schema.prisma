@@ -17,6 +17,11 @@ enum Role {
   SUPER_ADMIN
 }
 
+enum Platform {
+  IOS
+  ANDROID
+}
+
 enum ConnectionStatus {
   PENDING
   ACCEPTED
@@ -194,6 +199,7 @@ model PushToken {
   userId    String   @unique
   user      User     @relation("UserPushToken", fields: [userId], references: [id], onDelete: Cascade)
   token     String   @unique
+  platform  Platform
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
