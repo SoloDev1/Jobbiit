@@ -8,13 +8,13 @@
 CREATE TYPE "Platform" AS ENUM ('IOS', 'ANDROID');
 
 -- DropIndex
-DROP INDEX "Report_jobId_idx";
+--DROP INDEX "Report_jobId_idx";
 
 -- DropIndex
-DROP INDEX "Report_opportunityId_idx";
+--DROP INDEX "Report_opportunityId_idx";
 
 -- AlterTable
-ALTER TABLE "PushToken" ADD COLUMN     "platform" "Platform" NOT NULL;
+ALTER TABLE "PushToken" ADD COLUMN "platform" "Platform" NOT NULL DEFAULT 'ANDROID';
 
 -- CreateTable
 CREATE TABLE "JobSkill" (
