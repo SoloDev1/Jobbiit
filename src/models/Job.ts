@@ -418,3 +418,46 @@ export async function detachSkill(
 
   await prisma.jobSkill.deleteMany({ where: { jobId, skillId } })
 }
+
+export async function adminListJobs(
+  cursor?: string,
+  limit = 50,
+): Promise<{ jobs: any[]; nextCursor: string | null }> {
+  const take = limit + 1
+
+  let cursorWhere = {}
+  if (cursor) {
+    const decoded = decodeCursor(cursor)
+    if (decoded) {
+      cursorWhere = {
+        OR: [
+          { createdAt: { lt: decoded.createdAt } },
+          { AND: [{ createdAt: decoded.createdAt }, { id: { lt: decoded.id } }] },
+        ],
+      }
+    }
+  }
+
+  const rows = await prisma.job.findMany({
+    // No status filter — admin sees ALL jobs (OPEN, CLOSED, DRAFT)
+    where: cursorWhere,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take,
+    include: {
+      poster: {
+        select: {
+          id: true,
+          profile: { select: { firstName: true, lastName: true, avatarUrl: true } },
+        },
+      },
+      _count: { select: { applications: true } },
+    },
+  })
+
+  const hasMore = rows.length > limit
+  const slice = hasMore ? rows.slice(0, limit) : rows
+  const last = slice[slice.length - 1]
+  const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null
+
+  return { jobs: slice, nextCursor }
+}
