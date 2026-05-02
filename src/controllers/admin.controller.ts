@@ -30,6 +30,9 @@ import * as PushService from '../services/push.service'
 import * as NotificationModel from '../models/Notification'
 import * as UploadService from '../services/upload.service'
 
+import * as JobModel from '../models/Job'
+import * as OpportunityModel from '../models/Opportunity'
+
 const uuidParam = z.string().uuid()
 
 function actorId(req: Request): string {
@@ -389,4 +392,21 @@ export async function listAuditLogs(req: Request, res: Response): Promise<void> 
   )
 
   sendSuccess(res, { logs, nextCursor }, 'Audit logs')
+}
+
+
+export async function adminListJobs(req: Request, res: Response): Promise<void> {
+  const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined
+  const limit  = Math.min(Number(req.query.limit) || 50, 100)
+
+  const { jobs, nextCursor } = await JobModel.adminListJobs(cursor, limit)
+  sendSuccess(res, { jobs, nextCursor }, 'Jobs')
+}
+
+export async function adminListOpportunities(req: Request, res: Response): Promise<void> {
+  const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined
+  const limit  = Math.min(Number(req.query.limit) || 50, 100)
+
+  const { opportunities, nextCursor } = await OpportunityModel.adminListOpportunities(cursor, limit)
+  sendSuccess(res, { opportunities, nextCursor }, 'Opportunities')
 }

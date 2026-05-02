@@ -366,3 +366,47 @@ export async function rejectOpportunity(
     opp.posterId,
   ) as unknown as OpportunityDetail
 }
+
+
+export async function adminListOpportunities(
+  cursor?: string,
+  limit = 50,
+): Promise<{ opportunities: any[]; nextCursor: string | null }> {
+  const take = limit + 1
+
+  let cursorWhere = {}
+  if (cursor) {
+    const decoded = decodeCursor(cursor)
+    if (decoded) {
+      cursorWhere = {
+        OR: [
+          { createdAt: { lt: decoded.createdAt } },
+          { AND: [{ createdAt: decoded.createdAt }, { id: { lt: decoded.id } }] },
+        ],
+      }
+    }
+  }
+
+  const rows = await prisma.opportunity.findMany({
+    // No status filter, no deadline filter — admin sees ALL opportunities
+    where: cursorWhere,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take,
+    include: {
+      poster: {
+        select: {
+          id: true,
+          profile: { select: { firstName: true, lastName: true, avatarUrl: true } },
+        },
+      },
+      _count: { select: { applications: true } },
+    },
+  })
+
+  const hasMore = rows.length > limit
+  const slice = hasMore ? rows.slice(0, limit) : rows
+  const last = slice[slice.length - 1]
+  const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null
+
+  return { opportunities: slice, nextCursor }
+}
