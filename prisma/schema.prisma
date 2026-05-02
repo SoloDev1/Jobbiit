@@ -451,6 +451,9 @@ model Job {
   description  String
   requirements String?
   salary       String?
+  salaryMin    Int?
+  salaryMax    Int?
+  currency     String?   @default("USD")
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
