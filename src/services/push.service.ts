@@ -12,6 +12,7 @@ type ExpoMessage = {
   sound:    string
   badge:    number
   priority: string
+  channelId: string
 }
 
 async function postToExpo(messages: ExpoMessage[]): Promise<void> {
@@ -23,7 +24,7 @@ async function postToExpo(messages: ExpoMessage[]): Promise<void> {
       Accept:         'application/json',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify(messages),
   })
 
   const text = await res.text()
@@ -63,6 +64,7 @@ export async function sendPushToUser(
       sound:    'default',
       badge:    1,
       priority: 'high',
+      channelId: 'default',
     }
 
     await postToExpo([message])
@@ -96,6 +98,7 @@ export async function sendPushToUsers(
         sound:    'default',
         badge:    1,
         priority: 'high',
+        channelId: 'default',
       }))
       await postToExpo(messages)
     }
