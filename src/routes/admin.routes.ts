@@ -52,13 +52,12 @@ router.post('/notifications/send', authorize('ADMIN', 'SUPER_ADMIN'), validate(a
 // Jobs — uses dedicated admin model function (no status filter)
 router.get('/jobs', authorize('ADMIN', 'SUPER_ADMIN'), AdminController.adminListJobs)
 router.post('/jobs', authorize('ADMIN', 'SUPER_ADMIN'), validate(createJobSchema), JobController.createJob)
-router.patch('/jobs/:id', authorize('ADMIN', 'SUPER_ADMIN'), validate(updateJobSchema), JobController.updateJob)
 router.patch('/jobs/:id/close', authorize('ADMIN', 'SUPER_ADMIN'), JobController.closeJob)
 router.patch(
   '/jobs/:id',
   authorize('ADMIN', 'SUPER_ADMIN'),
   validate(updateJobSchema),
-  AdminController.adminUpdateJob,  // ← use this instead of JobController.updateJob
+  AdminController.adminUpdateJob,
 )
 
 // Opportunities — uses dedicated admin model function (no status/deadline filter)

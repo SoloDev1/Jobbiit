@@ -6,10 +6,10 @@ import type { CreateJobInput, UpdateJobInput, ApplyJobInput } from '../schemas/j
 // ─── Salary serialisation ─────────────────────────────────────────────────────
 // The Prisma model stores salary as a single nullable JSON string.
 
-interface SalaryInfo {
-  min?:      number
-  max?:      number
-  currency:  string
+export interface SalaryInfo {
+  min?:     number
+  max?:     number
+  currency: string
 }
 
 function encodeSalary(
@@ -461,9 +461,6 @@ export async function adminListJobs(
 
   return { jobs: slice, nextCursor }
 }
-
-
-// Admin
 
 export async function adminUpdateJob(
   id:   string,
