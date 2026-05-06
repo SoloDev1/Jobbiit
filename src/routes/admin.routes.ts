@@ -54,6 +54,8 @@ router.get('/jobs', authorize('ADMIN', 'SUPER_ADMIN'), AdminController.adminList
 router.post('/jobs', authorize('ADMIN', 'SUPER_ADMIN'), validate(createJobSchema), JobController.createJob)
 router.patch('/jobs/:id', authorize('ADMIN', 'SUPER_ADMIN'), validate(updateJobSchema), JobController.updateJob)
 router.patch('/jobs/:id/close', authorize('ADMIN', 'SUPER_ADMIN'), JobController.closeJob)
+// src/routes/admin.routes.ts — replace the jobs PATCH route
+router.patch('/jobs/:id', authorize('ADMIN', 'SUPER_ADMIN'), validate(updateJobSchema), AdminController.adminUpdateJob)
 
 // Opportunities — uses dedicated admin model function (no status/deadline filter)
 router.get('/opportunities', authorize('ADMIN', 'SUPER_ADMIN', 'MODERATOR'), AdminController.adminListOpportunities)
