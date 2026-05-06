@@ -465,8 +465,40 @@ export async function adminListJobs(
 
 // Admin
 
-export async function adminUpdateJob(id: string, data: UpdateJobInput) {
-  const job = await prisma.job.findUnique({ where: { id }, select: { id: true } })
+export async function adminUpdateJob(
+  id:   string,
+  data: UpdateJobInput,
+): Promise<JobDetail | null> {
+  const job = await prisma.job.findUnique({ where: { id }, select: { id: true, posterId: true } })
   if (!job) return null
-  return prisma.job.update({ where: { id }, data })
+
+  const patch: Prisma.JobUpdateInput = {}
+  if (data.title       !== undefined) patch.title       = data.title
+  if (data.company     !== undefined) patch.company     = data.company
+  if (data.description !== undefined) patch.description = data.description
+  if (data.type        !== undefined) patch.type        = data.type
+  if (data.location    !== undefined) patch.location    = data.location
+  if (data.isRemote    !== undefined) patch.isRemote    = data.isRemote
+  if (
+    data.salaryMin !== undefined ||
+    data.salaryMax !== undefined ||
+    data.currency  !== undefined
+  ) {
+    patch.salary = encodeSalary(data.salaryMin, data.salaryMax, data.currency ?? 'USD')
+  }
+
+  const row = await prisma.job.update({
+    where:   { id },
+    data:    patch,
+    include: {
+      poster: posterInclude,
+      savedBy: { where: { userId: job.posterId }, take: 1 },
+      _count:  { select: { applications: true } },
+    },
+  })
+
+  return mapJob(
+    row as unknown as Parameters<typeof mapJob>[0],
+    job.posterId,
+  ) as unknown as JobDetail
 }
