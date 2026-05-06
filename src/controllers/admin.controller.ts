@@ -415,13 +415,11 @@ export async function adminListOpportunities(req: Request, res: Response): Promi
 
 
 export async function adminUpdateJob(req: Request, res: Response): Promise<void> {
-  const idParsed = uuidParam.safeParse(req.params.id)
-  if (!idParsed.success) {
-    sendError(res, 'Invalid job id', 400, 'INVALID_ID')
-    return
-  }
+  const parsed = z.string().uuid().safeParse(req.params.id)
+  if (!parsed.success) { sendError(res, 'Invalid job id', 400, 'INVALID_ID'); return }
 
-  const result = await JobModel.adminUpdateJob(idParsed.data, req.body as UpdateJobInput)
+  const result = await JobModel.adminUpdateJob(parsed.data, req.body as UpdateJobInput)
   if (!result) { sendError(res, 'Job not found', 404, 'NOT_FOUND'); return }
+
   sendSuccess(res, result, 'Job updated')
 }
