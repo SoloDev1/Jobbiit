@@ -32,6 +32,7 @@ import * as UploadService from '../services/upload.service'
 
 import * as JobModel from '../models/Job'
 import * as OpportunityModel from '../models/Opportunity'
+import { UpdateJobInput } from '../schemas/job.schema'
 
 const uuidParam = z.string().uuid()
 
@@ -412,9 +413,15 @@ export async function adminListOpportunities(req: Request, res: Response): Promi
 }
 
 
-export async function adminUpdateJob(req: Request, res: Response) {
-  const id = req.params.id
-  const result = await JobModel.adminUpdateJob(id, req.body as UpdateJobInput)
+
+export async function adminUpdateJob(req: Request, res: Response): Promise<void> {
+  const idParsed = uuidParam.safeParse(req.params.id)
+  if (!idParsed.success) {
+    sendError(res, 'Invalid job id', 400, 'INVALID_ID')
+    return
+  }
+
+  const result = await JobModel.adminUpdateJob(idParsed.data, req.body as UpdateJobInput)
   if (!result) { sendError(res, 'Job not found', 404, 'NOT_FOUND'); return }
   sendSuccess(res, result, 'Job updated')
 }
