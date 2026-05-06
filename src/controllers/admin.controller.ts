@@ -410,3 +410,11 @@ export async function adminListOpportunities(req: Request, res: Response): Promi
   const { opportunities, nextCursor } = await OpportunityModel.adminListOpportunities(cursor, limit)
   sendSuccess(res, { opportunities, nextCursor }, 'Opportunities')
 }
+
+
+export async function adminUpdateJob(req: Request, res: Response) {
+  const id = req.params.id
+  const result = await JobModel.adminUpdateJob(id, req.body as UpdateJobInput)
+  if (!result) { sendError(res, 'Job not found', 404, 'NOT_FOUND'); return }
+  sendSuccess(res, result, 'Job updated')
+}

@@ -461,3 +461,12 @@ export async function adminListJobs(
 
   return { jobs: slice, nextCursor }
 }
+
+
+// Admin
+
+export async function adminUpdateJob(id: string, data: UpdateJobInput) {
+  const job = await prisma.job.findUnique({ where: { id }, select: { id: true } })
+  if (!job) return null
+  return prisma.job.update({ where: { id }, data })
+}
