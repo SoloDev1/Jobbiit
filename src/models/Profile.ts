@@ -139,7 +139,7 @@ export async function addEducation(
   const row = await prisma.education.create({
     data: {
       profileId,
-      school:      data.institution,
+      school:      data.school,
       degree:      data.degree,
       field:       data.field,
       startDate,
