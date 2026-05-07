@@ -178,7 +178,6 @@ export async function getJobs(
 // ─── createJob ────────────────────────────────────────────────────────────────
 
 export async function createJob(userId: string, data: CreateJobInput): Promise<JobDetail> {
-  const salary = encodeSalary(data.salaryMin, data.salaryMax, data.currency)
   const row = await prisma.job.create({
     data: {
       posterId:    userId,
@@ -188,7 +187,10 @@ export async function createJob(userId: string, data: CreateJobInput): Promise<J
       type:        data.type,
       location:    data.location ?? null,
       isRemote:    data.isRemote,
-      salary,
+      salaryMin:   data.salaryMin ?? null,
+      salaryMax:   data.salaryMax ?? null,
+      currency:    data.currency  ?? 'USD',
+      // no salary blob
     },
     include: {
       poster: posterInclude,
@@ -235,13 +237,9 @@ export async function updateJob(
   if (data.type        !== undefined) patch.type        = data.type
   if (data.location    !== undefined) patch.location    = data.location
   if (data.isRemote    !== undefined) patch.isRemote    = data.isRemote
-  if (
-    data.salaryMin !== undefined ||
-    data.salaryMax !== undefined ||
-    data.currency  !== undefined
-  ) {
-    patch.salary = encodeSalary(data.salaryMin, data.salaryMax, data.currency ?? 'USD')
-  }
+  if (data.salaryMin   !== undefined) patch.salaryMin   = data.salaryMin  // ✅ direct
+  if (data.salaryMax   !== undefined) patch.salaryMax   = data.salaryMax  // ✅ direct
+  if (data.currency    !== undefined) patch.currency    = data.currency   // ✅ direct
 
   const row = await prisma.job.update({
     where:   { id: jobId },
@@ -252,9 +250,10 @@ export async function updateJob(
       _count:  { select: { applications: true } },
     },
   })
-  return mapJob(row as unknown as Parameters<typeof mapJob>[0], userId) as unknown as JobDetail
-}
 
+  const { salary: _raw, savedBy: _savedBy, ...rest } = row as any
+  return { ...rest, isSavedByUser: _savedBy.length > 0 } as unknown as JobDetail
+}
 // ─── closeJob ─────────────────────────────────────────────────────────────────
 
 export async function closeJob(
@@ -459,15 +458,9 @@ export async function adminListJobs(
   const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null
 
   const jobs = slice.map((row) => {
-    const salary = parseSalary(row.salary as string | null)
-    const { salary: _raw, ...rest } = row as any
-    return {
-      ...rest,
-      salaryMin: salary?.min      ?? null,
-      salaryMax: salary?.max      ?? null,
-      currency:  salary?.currency ?? 'USD',
-    }
-  })
+  const { salary: _raw, ...rest } = row as any
+  return rest  // salaryMin, salaryMax, currency already on the row
+})
 
   return { jobs, nextCursor }
 }
@@ -481,19 +474,16 @@ export async function adminUpdateJob(
   if (!job) return null
 
   const patch: Prisma.JobUpdateInput = {}
-  if (data.title       !== undefined) patch.title       = data.title
-  if (data.company     !== undefined) patch.company     = data.company
+  if (data.title       !== undefined) patch.title     = data.title
+  if (data.company     !== undefined) patch.company   = data.company
   if (data.description !== undefined) patch.description = data.description
-  if (data.type        !== undefined) patch.type        = data.type
-  if (data.location    !== undefined) patch.location    = data.location
-  if (data.isRemote    !== undefined) patch.isRemote    = data.isRemote
-  if (
-    data.salaryMin !== undefined ||
-    data.salaryMax !== undefined ||
-    data.currency  !== undefined
-  ) {
-    patch.salary = encodeSalary(data.salaryMin, data.salaryMax, data.currency ?? 'USD')
-  }
+  if (data.type        !== undefined) patch.type      = data.type
+  if (data.location    !== undefined) patch.location  = data.location
+  if (data.isRemote    !== undefined) patch.isRemote  = data.isRemote
+  if (data.salaryMin   !== undefined) patch.salaryMin = data.salaryMin
+  if (data.salaryMax   !== undefined) patch.salaryMax = data.salaryMax
+  if (data.currency    !== undefined) patch.currency  = data.currency
+  // no salary blob encoding at all
 
   const row = await prisma.job.update({
     where:   { id },
@@ -505,14 +495,9 @@ export async function adminUpdateJob(
     },
   })
 
-  const salary = parseSalary(row.salary as string | null)
   const { salary: _raw, savedBy: _savedBy, ...rest } = row as any
-
   return {
     ...rest,
-    salaryMin:     salary?.min      ?? null,
-    salaryMax:     salary?.max      ?? null,
-    currency:      salary?.currency ?? 'USD',
     isSavedByUser: false,
   } as unknown as JobDetail
 }
