@@ -439,7 +439,6 @@ export async function adminListJobs(
   }
 
   const rows = await prisma.job.findMany({
-    // No status filter — admin sees ALL jobs (OPEN, CLOSED, DRAFT)
     where: cursorWhere,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take,
@@ -459,8 +458,20 @@ export async function adminListJobs(
   const last = slice[slice.length - 1]
   const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null
 
-  return { jobs: slice, nextCursor }
+  const jobs = slice.map((row) => {
+    const salary = parseSalary(row.salary as string | null)
+    const { salary: _raw, ...rest } = row as any
+    return {
+      ...rest,
+      salaryMin: salary?.min      ?? null,
+      salaryMax: salary?.max      ?? null,
+      currency:  salary?.currency ?? 'USD',
+    }
+  })
+
+  return { jobs, nextCursor }
 }
+
 
 export async function adminUpdateJob(
   id:   string,
@@ -494,8 +505,14 @@ export async function adminUpdateJob(
     },
   })
 
-  return mapJob(
-    row as unknown as Parameters<typeof mapJob>[0],
-    job.posterId,
-  ) as unknown as JobDetail
+  const salary = parseSalary(row.salary as string | null)
+  const { salary: _raw, savedBy: _savedBy, ...rest } = row as any
+
+  return {
+    ...rest,
+    salaryMin:     salary?.min      ?? null,
+    salaryMax:     salary?.max      ?? null,
+    currency:      salary?.currency ?? 'USD',
+    isSavedByUser: false,
+  } as unknown as JobDetail
 }
