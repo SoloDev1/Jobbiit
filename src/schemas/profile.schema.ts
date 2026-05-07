@@ -37,7 +37,7 @@ export const addExperienceSchema = z
 
 export const addEducationSchema = z
   .object({
-    institution: z.string().trim().min(1),
+    school: z.string().trim().min(1),
     degree:      z.string().trim().min(1),
     field:       z.string().trim().min(1),
     startYear:   z.number().int().min(1900).max(2100),
