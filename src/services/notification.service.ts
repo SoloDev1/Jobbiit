@@ -109,72 +109,100 @@ export async function notifyNewPost(postId: string, authorId: string): Promise<v
  * Fan-out OPPORTUNITY_MATCH notifications to all users whose profile skills
  * overlap the opportunity's skills. Capped at 500 recipients. Fire-and-forget safe.
  */
-export async function notifyOpportunityMatch(
-  opportunityId: string,
-  title:         string,
-): Promise<void> {
-  try {
-    const skillIds = await prisma.opportunitySkill
-      .findMany({ where: { opportunityId }, select: { skillId: true } })
-      .then((rows) => rows.map((r) => r.skillId))
+// export async function notifyOpportunityMatch(
+//   opportunityId: string,
+//   title:         string,
+// ): Promise<void> {
+//   try {
+//     const skillIds = await prisma.opportunitySkill
+//       .findMany({ where: { opportunityId }, select: { skillId: true } })
+//       .then((rows) => rows.map((r) => r.skillId))
 
-    if (skillIds.length === 0) return
+//     if (skillIds.length === 0) return
 
-    const userIds = await prisma.profileSkill
-      .findMany({
-        where:    { skillId: { in: skillIds } },
-        select:   { profile: { select: { userId: true } } },
-        distinct: ['profileId'],
-        take:     500,
-      })
-      .then((rows) => rows.map((r) => r.profile.userId))
+//     const userIds = await prisma.profileSkill
+//       .findMany({
+//         where:    { skillId: { in: skillIds } },
+//         select:   { profile: { select: { userId: true } } },
+//         distinct: ['profileId'],
+//         take:     500,
+//       })
+//       .then((rows) => rows.map((r) => r.profile.userId))
 
-    if (userIds.length === 0) return
+//     if (userIds.length === 0) return
 
-    const message = `"${title}" matches your skills`
-    for (const recipientId of userIds) {
-      createNotification(recipientId, 'OPPORTUNITY_MATCH', message, opportunityId)
-    }
+//     const message = `"${title}" matches your skills`
+//     for (const recipientId of userIds) {
+//       createNotification(recipientId, 'OPPORTUNITY_MATCH', message, opportunityId)
+//     }
 
-    logger.info({ opportunityId, recipientCount: userIds.length }, 'Opportunity match notifications sent')
-  } catch (err) {
-    logger.error({ err, opportunityId }, 'notifyOpportunityMatch failed')
-  }
-}
+//     logger.info({ opportunityId, recipientCount: userIds.length }, 'Opportunity match notifications sent')
+//   } catch (err) {
+//     logger.error({ err, opportunityId }, 'notifyOpportunityMatch failed')
+//   }
+// }
 
 /**
  * Fan-out JOB_MATCH notifications to all users whose profile skills
  * overlap the job's skills. Capped at 500 recipients. Fire-and-forget safe.
  */
-export async function notifyJobMatch(
-  jobId: string,
+export async function notifyJobMatch(jobId: string, title: string): Promise<void> {
+  try {
+    const message = `New job "${title}" is now available`
+    const BATCH_SIZE = 100
+    let cursor: string | undefined = undefined
+
+    while (true) {
+      const rows: any = await prisma.user.findMany({
+        select: { id: true },
+        take: BATCH_SIZE,
+        ...(cursor && { skip: 1, cursor: { id: cursor } }),
+      })
+
+      if (rows.length === 0) break
+
+      for (const row of rows) {
+        createNotification(row.id, 'JOB_MATCH', message, jobId)
+      }
+
+      if (rows.length < BATCH_SIZE) break
+      cursor = rows[rows.length - 1].id
+    }
+
+    logger.info({ jobId, title }, 'notifyJobMatch: all users notified')
+  } catch (err) {
+    logger.error({ err, jobId, title }, 'notifyJobMatch failed')
+  }
+}
+
+export async function notifyOpportunityMatch(
+  opportunityId: string,
   title: string,
 ): Promise<void> {
   try {
-    const skillIds = await prisma.jobSkill
-      .findMany({ where: { jobId }, select: { skillId: true } })
-      .then((rows) => rows.map((r) => r.skillId))
+    const message = `New opportunity "${title}" is now available`
+    const BATCH_SIZE = 100
+    let cursor: string | undefined = undefined
 
-    if (skillIds.length === 0) return
-
-    const userIds = await prisma.profileSkill
-      .findMany({
-        where:    { skillId: { in: skillIds } },
-        select:   { profile: { select: { userId: true } } },
-        distinct: ['profileId'],
-        take:     500,
+    while (true) {
+      const rows : { id: string }[] = await prisma.user.findMany({
+        select: { id: true },
+        take: BATCH_SIZE,
+        ...(cursor && { skip: 1, cursor: { id: cursor } }),
       })
-      .then((rows) => rows.map((r) => r.profile.userId))
 
-    if (userIds.length === 0) return
+      if (rows.length === 0) break
 
-    const message = `"${title}" matches your skills`
-    for (const recipientId of userIds) {
-      createNotification(recipientId, 'JOB_MATCH', message, jobId)
+      for (const row of rows) {
+        createNotification(row.id, 'OPPORTUNITY_MATCH', message, opportunityId)
+      }
+
+      if (rows.length < BATCH_SIZE) break
+      cursor = rows[rows.length - 1].id
     }
 
-    logger.info({ jobId, recipientCount: userIds.length }, 'Job match notifications sent')
+    logger.info({ opportunityId, title }, 'notifyOpportunityMatch: all users notified')
   } catch (err) {
-    logger.error({ err, jobId }, 'notifyJobMatch failed')
+    logger.error({ err, opportunityId, title }, 'notifyOpportunityMatch failed')
   }
 }
