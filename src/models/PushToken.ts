@@ -1,10 +1,14 @@
 import { prisma } from '../config/db'
 
-export async function upsertToken(userId: string, token: string): Promise<void> {
+export async function upsertToken(
+  userId: string,
+  token: string,
+  platform: 'IOS' | 'ANDROID'
+): Promise<void> {
   await prisma.pushToken.upsert({
-    where:  { userId },
-    create: { userId, token },
-    update: { token },
+    where: { userId },
+    create: { userId, token, platform },
+    update: { token, platform },
   })
 }
 

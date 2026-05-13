@@ -8,8 +8,8 @@ function userId(req: Request): string {
 }
 
 export async function registerToken(req: Request, res: Response): Promise<void> {
-  const { token } = req.body as RegisterTokenInput
-  await PushTokenModel.upsertToken(userId(req), token)
+  const { token, platform } = req.body as RegisterTokenInput
+await PushTokenModel.upsertToken(userId(req), token, platform)
   sendSuccess(res, { registered: true }, 'Push token registered')
 }
 

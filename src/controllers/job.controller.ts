@@ -14,6 +14,7 @@ import {
   type UpdateJobInput,
   type ApplyJobInput,
 } from '../schemas/job.schema'
+import * as notificationService from '../services/notification.service'
 
 const uuidParam = z.string().uuid()
 
@@ -53,8 +54,18 @@ export async function createJob(req: Request, res: Response): Promise<void> {
   const data = req.body as CreateJobInput
 
   const job = await JobModel.createJob(userId(req), data)
-  logger.info({ userId: userId(req), jobId: job.id }, 'Job created')
 
+   void notificationService.notifyJobCreated(
+  job.id,
+  job.title,
+  job.company,
+  userId(req),
+).catch((err: unknown) => {
+  logger.error({ err, jobId: job.id }, 'notifyJobCreated failed')
+})
+ 
+
+  logger.info({ userId: userId(req), jobId: job.id }, 'Job created')
   sendCreated(res, job, 'Job created')
 }
 
@@ -201,4 +212,61 @@ export async function toggleSaveJob(req: Request, res: Response): Promise<void> 
 export async function getSavedJobs(req: Request, res: Response): Promise<void> {
   const saved = await JobModel.getSavedJobs(userId(req))
   sendSuccess(res, saved, 'Saved jobs loaded')
+}
+
+// ─── attachJobSkills ──────────────────────────────────────────────────────────
+
+const skillIdsSchema = z.object({
+  skillIds: z.array(z.string().uuid()).min(1).max(20),
+})
+
+export async function attachJobSkills(req: Request, res: Response): Promise<void> {
+  const idParsed = uuidParam.safeParse(req.params.id)
+  if (!idParsed.success) {
+    sendError(res, 'Invalid job id', 400, 'INVALID_ID')
+    return
+  }
+
+  const parsed = skillIdsSchema.safeParse(req.body)
+  if (!parsed.success) {
+    sendError(res, 'Validation failed', 422, 'VALIDATION_ERROR', parsed.error.flatten())
+    return
+  }
+
+  const result = await JobModel.attachSkills(idParsed.data, userId(req), parsed.data.skillIds)
+  if (result === 'not_found') {
+    sendError(res, 'Job not found', 404, 'NOT_FOUND')
+    return
+  }
+  if (result === 'forbidden') {
+    sendError(res, 'Forbidden', 403, 'FORBIDDEN')
+    return
+  }
+
+  logger.info({ userId: userId(req), jobId: idParsed.data, count: parsed.data.skillIds.length }, 'Job skills attached')
+  sendSuccess(res, result, 'Skills attached')
+}
+
+// ─── detachJobSkill ───────────────────────────────────────────────────────────
+
+export async function detachJobSkill(req: Request, res: Response): Promise<void> {
+  const idParsed      = uuidParam.safeParse(req.params.id)
+  const skillIdParsed = uuidParam.safeParse(req.params.skillId)
+  if (!idParsed.success || !skillIdParsed.success) {
+    sendError(res, 'Invalid id', 400, 'INVALID_ID')
+    return
+  }
+
+  const result = await JobModel.detachSkill(idParsed.data, userId(req), skillIdParsed.data)
+  if (result === 'not_found') {
+    sendError(res, 'Job not found', 404, 'NOT_FOUND')
+    return
+  }
+  if (result === 'forbidden') {
+    sendError(res, 'Forbidden', 403, 'FORBIDDEN')
+    return
+  }
+
+  logger.info({ userId: userId(req), jobId: idParsed.data, skillId: skillIdParsed.data }, 'Job skill detached')
+  sendNoContent(res)
 }

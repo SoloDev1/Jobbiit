@@ -27,6 +27,23 @@ export const createJobSchema = jobFields
 
 export const updateJobSchema = jobFields.partial().strict()
 
+// Define a specific schema for just the salary update
+export const updateSalarySchema = z.object({
+  salaryMin: z.number().int().positive().optional(),
+  salaryMax: z.number().int().positive().optional(),
+  currency:  z.string().trim().length(3).optional(),
+}).refine(
+  (d) => {
+    if (d.salaryMin !== undefined && d.salaryMax !== undefined) {
+      return d.salaryMax >= d.salaryMin;
+    }
+    return true;
+  },
+  { message: 'salaryMax must be >= salaryMin', path: ['salaryMax'] }
+);
+
+
+
 export const applyJobSchema = z
   .object({
     coverLetter: z.string().trim().max(2000).optional(),
@@ -49,3 +66,4 @@ export type CreateJobInput = z.infer<typeof createJobSchema>
 export type UpdateJobInput = z.infer<typeof updateJobSchema>
 export type ApplyJobInput  = z.infer<typeof applyJobSchema>
 export type JobsQuery      = z.infer<typeof jobsQuerySchema>
+export type UpdateSalaryInput = z.infer<typeof updateSalarySchema>;

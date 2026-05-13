@@ -37,6 +37,6 @@ router.post('/skills', validate(addSkillsSchema), ProfileController.addSkills)
 router.post('/avatar', uploadSingleFile, ProfileController.uploadAvatar)
 router.post('/banner', uploadSingleFile, ProfileController.uploadBanner)
 
-router.get('/:userId', ProfileController.getProfile)
+router.get('/me', ProfileController.getProfile)
 
 export default router

@@ -21,10 +21,12 @@ router.get('/',  JobController.getJobs)
 router.post('/', validate(createJobSchema), JobController.createJob)
 
 // ─── Resource routes ──────────────────────────────────────────────────────────
-router.get('/:id',                 JobController.getJobById)
-router.patch('/:id',               validate(updateJobSchema), JobController.updateJob)
-router.delete('/:id',              JobController.closeJob)
-router.post('/:id/apply',          validate(applyJobSchema),  JobController.applyToJob)
-router.get('/:id/applications',    JobController.getApplications)
+router.get('/:id',                  JobController.getJobById)
+router.patch('/:id',                validate(updateJobSchema), JobController.updateJob)
+router.delete('/:id',               JobController.closeJob)
+router.post('/:id/apply',           validate(applyJobSchema),  JobController.applyToJob)
+router.get('/:id/applications',     JobController.getApplications)
+router.post('/:id/skills',          JobController.attachJobSkills)
+router.delete('/:id/skills/:skillId', JobController.detachJobSkill)
 
 export default router

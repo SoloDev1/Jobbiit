@@ -2,14 +2,16 @@ import { prisma } from '../config/db'
 import { JobStatus, JobType } from '@prisma/client'
 import type { Prisma } from '@prisma/client'
 import type { CreateJobInput, UpdateJobInput, ApplyJobInput } from '../schemas/job.schema'
+import * as notificationService from '../services/notification.service'
+import * as JobModel from '../models/Job'
 
 // ─── Salary serialisation ─────────────────────────────────────────────────────
 // The Prisma model stores salary as a single nullable JSON string.
 
-interface SalaryInfo {
-  min?:      number
-  max?:      number
-  currency:  string
+export interface SalaryInfo {
+  min?:     number
+  max?:     number
+  currency: string
 }
 
 function encodeSalary(
@@ -178,7 +180,6 @@ export async function getJobs(
 // ─── createJob ────────────────────────────────────────────────────────────────
 
 export async function createJob(userId: string, data: CreateJobInput): Promise<JobDetail> {
-  const salary = encodeSalary(data.salaryMin, data.salaryMax, data.currency)
   const row = await prisma.job.create({
     data: {
       posterId:    userId,
@@ -188,7 +189,10 @@ export async function createJob(userId: string, data: CreateJobInput): Promise<J
       type:        data.type,
       location:    data.location ?? null,
       isRemote:    data.isRemote,
-      salary,
+      salaryMin:   data.salaryMin ?? null,
+      salaryMax:   data.salaryMax ?? null,
+      currency:    data.currency  ?? 'USD',
+      // no salary blob
     },
     include: {
       poster: posterInclude,
@@ -235,13 +239,9 @@ export async function updateJob(
   if (data.type        !== undefined) patch.type        = data.type
   if (data.location    !== undefined) patch.location    = data.location
   if (data.isRemote    !== undefined) patch.isRemote    = data.isRemote
-  if (
-    data.salaryMin !== undefined ||
-    data.salaryMax !== undefined ||
-    data.currency  !== undefined
-  ) {
-    patch.salary = encodeSalary(data.salaryMin, data.salaryMax, data.currency ?? 'USD')
-  }
+  if (data.salaryMin   !== undefined) patch.salaryMin   = data.salaryMin  // ✅ direct
+  if (data.salaryMax   !== undefined) patch.salaryMax   = data.salaryMax  // ✅ direct
+  if (data.currency    !== undefined) patch.currency    = data.currency   // ✅ direct
 
   const row = await prisma.job.update({
     where:   { id: jobId },
@@ -252,9 +252,10 @@ export async function updateJob(
       _count:  { select: { applications: true } },
     },
   })
-  return mapJob(row as unknown as Parameters<typeof mapJob>[0], userId) as unknown as JobDetail
-}
 
+  const { salary: _raw, savedBy: _savedBy, ...rest } = row as any
+  return { ...rest, isSavedByUser: _savedBy.length > 0 } as unknown as JobDetail
+}
 // ─── closeJob ─────────────────────────────────────────────────────────────────
 
 export async function closeJob(
@@ -385,4 +386,135 @@ export async function getSavedJobs(userId: string): Promise<{ savedAt: Date; job
     savedAt: r.createdAt,
     job:     mapJob(r.job as unknown as Parameters<typeof mapJob>[0], userId) as unknown as JobDetail,
   }))
+}
+
+// ─── attachSkills / detachSkill ───────────────────────────────────────────────
+
+export async function attachSkills(
+  jobId:    string,
+  actorId:  string,
+  skillIds: string[],
+): Promise<{ skillIds: string[] } | 'not_found' | 'forbidden'> {
+  const job = await prisma.job.findUnique({ where: { id: jobId }, select: { posterId: true } })
+  if (!job) return 'not_found'
+  if (job.posterId !== actorId) return 'forbidden'
+
+  await prisma.jobSkill.createMany({
+    data:           skillIds.map((skillId) => ({ jobId, skillId })),
+    skipDuplicates: true,
+  })
+
+  const rows = await prisma.jobSkill.findMany({ where: { jobId }, select: { skillId: true } })
+  return { skillIds: rows.map((r) => r.skillId) }
+}
+
+export async function detachSkill(
+  jobId:   string,
+  actorId: string,
+  skillId: string,
+): Promise<void | 'not_found' | 'forbidden'> {
+  const job = await prisma.job.findUnique({ where: { id: jobId }, select: { posterId: true } })
+  if (!job) return 'not_found'
+  if (job.posterId !== actorId) return 'forbidden'
+
+  await prisma.jobSkill.deleteMany({ where: { jobId, skillId } })
+}
+
+export async function adminListJobs(
+  cursor?: string,
+  limit = 50,
+): Promise<{ jobs: any[]; nextCursor: string | null }> {
+  const take = limit + 1
+
+  let cursorWhere = {}
+  if (cursor) {
+    const decoded = decodeCursor(cursor)
+    if (decoded) {
+      cursorWhere = {
+        OR: [
+          { createdAt: { lt: decoded.createdAt } },
+          { AND: [{ createdAt: decoded.createdAt }, { id: { lt: decoded.id } }] },
+        ],
+      }
+    }
+  }
+
+  const rows = await prisma.job.findMany({
+    where: cursorWhere,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take,
+    include: {
+      poster: {
+        select: {
+          id: true,
+          profile: { select: { firstName: true, lastName: true, avatarUrl: true } },
+        },
+      },
+      _count: { select: { applications: true } },
+    },
+  })
+
+  const hasMore = rows.length > limit
+  const slice = hasMore ? rows.slice(0, limit) : rows
+  const last = slice[slice.length - 1]
+  const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null
+
+  const jobs = slice.map((row) => {
+  const { salary: _raw, ...rest } = row as any
+  return rest  // salaryMin, salaryMax, currency already on the row
+})
+
+  return { jobs, nextCursor }
+}
+
+
+export async function adminUpdateJob(
+  id:   string,
+  data: UpdateJobInput,
+): Promise<JobDetail | null> {
+  const job = await prisma.job.findUnique({ where: { id }, select: { id: true, posterId: true } })
+  if (!job) return null
+
+  const patch: Prisma.JobUpdateInput = {}
+  if (data.title       !== undefined) patch.title     = data.title
+  if (data.company     !== undefined) patch.company   = data.company
+  if (data.description !== undefined) patch.description = data.description
+  if (data.type        !== undefined) patch.type      = data.type
+  if (data.location    !== undefined) patch.location  = data.location
+  if (data.isRemote    !== undefined) patch.isRemote  = data.isRemote
+  if (data.salaryMin   !== undefined) patch.salaryMin = data.salaryMin
+  if (data.salaryMax   !== undefined) patch.salaryMax = data.salaryMax
+  if (data.currency    !== undefined) patch.currency  = data.currency
+  // no salary blob encoding at all
+
+  const row = await prisma.job.update({
+    where:   { id },
+    data:    patch,
+    include: {
+      poster: posterInclude,
+      savedBy: { where: { userId: job.posterId }, take: 1 },
+      _count:  { select: { applications: true } },
+    },
+  })
+
+  const { salary: _raw, savedBy: _savedBy, ...rest } = row as any
+  return {
+    ...rest,
+    isSavedByUser: false,
+  } as unknown as JobDetail
+}
+
+
+
+export async function handleCreateJob(req, res) {
+  const job = await JobModel.createJob(req.user.id, req.body)
+
+  // Attach skills first if provided, then fan-out match notifications
+  if (req.body.skillIds?.length) {
+    await JobModel.attachSkills(job.id, req.user.id, req.body.skillIds)
+    // Fire-and-forget — won't block the response
+    void notificationService.notifyJobMatch(job.id, job.title)
+  }
+
+  res.status(201).json(job)
 }

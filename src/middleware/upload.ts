@@ -17,3 +17,6 @@ export const upload = multer({
 
 /** Field name `file`. Max 5MB. JPEG, PNG, or WebP only. */
 export const uploadSingleFile = upload.single('file')
+
+/** Field name `files`. Up to 4 files, max 5MB each. JPEG, PNG, or WebP only. */
+export const uploadPostFiles = upload.array('files', 4)
