@@ -65,7 +65,7 @@ export async function buildAccountDataExport(userId: string) {
         orderBy: { createdAt: 'desc' },
         take:    500,
       },
-      interests: { include: { interest: true } },
+      interests: true,
       recommendations: {
         orderBy: { updatedAt: 'desc' },
         take:    500,

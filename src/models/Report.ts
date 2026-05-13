@@ -12,7 +12,7 @@ export function decodeCursor(cursor: string): { createdAt: Date; id: string } | 
     const raw = Buffer.from(cursor, 'base64url').toString('utf8')
     const sep = raw.indexOf('|')
     if (sep <= 0) return null
-    const t  = raw.slice(0, sep)
+    const t = raw.slice(0, sep)
     const id = raw.slice(sep + 1)
     if (!id) return null
     const createdAt = new Date(t)
@@ -38,30 +38,30 @@ function targetFilter(
       return { jobId: targetId }
     case ReportType.OPPORTUNITY:
       return { opportunityId: targetId }
-    case ReportType.JOB_COMMENT:         
+    case ReportType.JOB_COMMENT:
       return { jobCommentId: targetId }
-    case ReportType.OPPORTUNITY_COMMENT: 
+    case ReportType.OPPORTUNITY_COMMENT:
       return { opportunityCommentId: targetId }
   }
 }
 
 function targetCreateData(
-  type:     ReportType,
+  type: ReportType,
   targetId: string,
 ) {
   switch (type) {
     case ReportType.POST:
-      return { post:               { connect: { id: targetId } } }
+      return { post: { connect: { id: targetId } } }
     case ReportType.COMMENT:
-      return { comment:            { connect: { id: targetId } } }
+      return { comment: { connect: { id: targetId } } }
     case ReportType.USER:
-      return { reportedUser:       { connect: { id: targetId } } }
+      return { reportedUser: { connect: { id: targetId } } }
     case ReportType.JOB:
-      return { job:                { connect: { id: targetId } } }
+      return { job: { connect: { id: targetId } } }
     case ReportType.OPPORTUNITY:
-      return { opportunity:        { connect: { id: targetId } } }
+      return { opportunity: { connect: { id: targetId } } }
     case ReportType.JOB_COMMENT:
-      return { jobComment:         { connect: { id: targetId } } }
+      return { jobComment: { connect: { id: targetId } } }
     case ReportType.OPPORTUNITY_COMMENT:
       return { opportunityComment: { connect: { id: targetId } } }
   }
@@ -74,8 +74,8 @@ export async function createReport(
   const dup = await prisma.report.findFirst({
     where: {
       filerId: reporterId,
-      status:  ReportStatus.PENDING,
-      type:    data.type,
+      status: ReportStatus.PENDING,
+      type: data.type,
       ...targetFilter(data.type, data.targetId),
     },
     select: { id: true },
@@ -88,9 +88,9 @@ export async function createReport(
 
   const row = await prisma.report.create({
     data: {
-      filer:   { connect: { id: reporterId } },
-      type:    data.type,
-      reason:  ReportReason.OTHER,
+      filer: { connect: { id: reporterId } },
+      type: data.type,
+      reason: ReportReason.OTHER,
       details: detailsText,
       ...targetCreateData(data.type, data.targetId),
     },
@@ -101,7 +101,7 @@ export async function createReport(
 
 export async function getMyReports(userId: string): Promise<Report[]> {
   return prisma.report.findMany({
-    where:   { filerId: userId },
+    where: { filerId: userId },
     orderBy: { createdAt: 'desc' },
   })
 }
@@ -123,16 +123,16 @@ export async function getPendingReports(
     status: ReportStatus.PENDING,
     ...(cursorDecoded
       ? {
-          OR: [
-            { createdAt: { lt: cursorDecoded.createdAt } },
-            {
-              AND: [
-                { createdAt: cursorDecoded.createdAt },
-                { id: { lt: cursorDecoded.id } },
-              ],
-            },
-          ],
-        }
+        OR: [
+          { createdAt: { lt: cursorDecoded.createdAt } },
+          {
+            AND: [
+              { createdAt: cursorDecoded.createdAt },
+              { id: { lt: cursorDecoded.id } },
+            ],
+          },
+        ],
+      }
       : {}),
   }
 
@@ -143,8 +143,8 @@ export async function getPendingReports(
   })
 
   const hasMore = rows.length > limit
-  const slice   = hasMore ? rows.slice(0, limit) : rows
-  const last    = slice[slice.length - 1]
+  const slice = hasMore ? rows.slice(0, limit) : rows
+  const last = slice[slice.length - 1]
   const nextCursor =
     hasMore && last ? encodeCursor(last.createdAt, last.id) : null
 
@@ -157,7 +157,7 @@ export async function resolveReport(
   action: string,
 ): Promise<'ok' | 'not_found'> {
   const existing = await prisma.report.findUnique({
-    where:  { id },
+    where: { id },
     select: { id: true, status: true },
   })
   if (!existing || existing.status !== ReportStatus.PENDING) return 'not_found'
@@ -165,10 +165,10 @@ export async function resolveReport(
   await prisma.report.update({
     where: { id },
     data: {
-      status:         ReportStatus.RESOLVED,
-      resolvedAt:     new Date(),
+      status: ReportStatus.RESOLVED,
+      resolvedAt: new Date(),
       resolutionNote: action,
-      resolvedBy:     { connect: { id: resolverId } },
+      resolvedBy: { connect: { id: resolverId } },
     },
   })
   return 'ok'
@@ -179,7 +179,7 @@ export async function dismissReport(
   resolverId: string,
 ): Promise<'ok' | 'not_found'> {
   const existing = await prisma.report.findUnique({
-    where:  { id },
+    where: { id },
     select: { id: true, status: true },
   })
   if (!existing || existing.status !== ReportStatus.PENDING) return 'not_found'
@@ -187,7 +187,7 @@ export async function dismissReport(
   await prisma.report.update({
     where: { id },
     data: {
-      status:     ReportStatus.DISMISSED,
+      status: ReportStatus.DISMISSED,
       resolvedAt: new Date(),
       resolvedBy: { connect: { id: resolverId } },
     },
@@ -196,11 +196,11 @@ export async function dismissReport(
 }
 
 export type AdminStats = {
-  users:           number
-  posts:           number
-  jobs:            number
-  opportunities:   number
-  pendingReports:  number
+  users: number
+  posts: number
+  jobs: number
+  opportunities: number
+  pendingReports: number
 }
 
 export async function getAdminStats(): Promise<AdminStats> {
