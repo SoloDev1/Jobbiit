@@ -38,27 +38,32 @@ function targetFilter(
       return { jobId: targetId }
     case ReportType.OPPORTUNITY:
       return { opportunityId: targetId }
+    case ReportType.JOB_COMMENT:         
+      return { jobCommentId: targetId }
+    case ReportType.OPPORTUNITY_COMMENT: 
+      return { opportunityCommentId: targetId }
   }
 }
 
 function targetCreateData(
-  type: ReportType,
+  type:     ReportType,
   targetId: string,
-): Pick<
-  Prisma.ReportCreateInput,
-  'post' | 'comment' | 'reportedUser' | 'job' | 'opportunity'
-> {
+) {
   switch (type) {
     case ReportType.POST:
-      return { post: { connect: { id: targetId } } }
+      return { post:               { connect: { id: targetId } } }
     case ReportType.COMMENT:
-      return { comment: { connect: { id: targetId } } }
+      return { comment:            { connect: { id: targetId } } }
     case ReportType.USER:
-      return { reportedUser: { connect: { id: targetId } } }
+      return { reportedUser:       { connect: { id: targetId } } }
     case ReportType.JOB:
-      return { job: { connect: { id: targetId } } }
+      return { job:                { connect: { id: targetId } } }
     case ReportType.OPPORTUNITY:
-      return { opportunity: { connect: { id: targetId } } }
+      return { opportunity:        { connect: { id: targetId } } }
+    case ReportType.JOB_COMMENT:
+      return { jobComment:         { connect: { id: targetId } } }
+    case ReportType.OPPORTUNITY_COMMENT:
+      return { opportunityComment: { connect: { id: targetId } } }
   }
 }
 
