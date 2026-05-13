@@ -63,6 +63,11 @@ enum NotificationType {
   OPPORTUNITY_MATCH
   OPPORTUNITY_EXPIRING
   SYSTEM
+
+  JOB_LIKE
+  JOB_COMMENT
+  OPPORTUNITY_LIKE
+  OPPORTUNITY_COMMENT
 }
 
 enum OpportunityStatus {
@@ -138,6 +143,8 @@ enum ReportType {
   USER
   JOB
   OPPORTUNITY
+  JOB_COMMENT         
+  OPPORTUNITY_COMMENT 
 }
 
 enum ReportReason {
@@ -173,6 +180,11 @@ model User {
   onboardingCompletedAt DateTime?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
+
+  jobLikes            JobLike[]
+  jobComments         JobComment[]
+  opportunityLikes    OpportunityLike[]
+  opportunityComments OpportunityComment[]
 
   refreshTokens       RefreshToken[]
   profile             Profile?
@@ -432,6 +444,9 @@ model Report {
   resolutionNote  String?
   createdAt       DateTime     @default(now())
 
+  jobCommentId         String?
+  opportunityCommentId String?
+
   filer          User         @relation("ReportFiler",    fields: [filerId],        references: [id], onDelete: Cascade)
   post           Post?        @relation(fields: [postId],                           references: [id], onDelete: SetNull)
   comment        Comment?     @relation(fields: [commentId],                        references: [id], onDelete: SetNull)
@@ -439,6 +454,9 @@ model Report {
   job            Job?         @relation(fields: [jobId],                          references: [id], onDelete: SetNull)
   opportunity    Opportunity? @relation(fields: [opportunityId],                 references: [id], onDelete: SetNull)
   resolvedBy     User?        @relation("ReportResolver", fields: [resolvedById],   references: [id], onDelete: SetNull)
+
+  jobComment         JobComment?         @relation(fields: [jobCommentId],         references: [id], onDelete: SetNull)
+  opportunityComment OpportunityComment? @relation(fields: [opportunityCommentId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([type])
@@ -468,6 +486,9 @@ model Job {
   currency     String?   @default("USD")
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+
+  likes    JobLike[]
+  comments JobComment[]
 
   applications Application[]
   savedBy      SavedJob[]
@@ -551,6 +572,10 @@ model Opportunity {
   salary          String?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
+
+
+  likes    OpportunityLike[]
+  comments OpportunityComment[]
 
   poster          User               @relation("OpportunityPoster",   fields: [posterId],     references: [id], onDelete: Cascade)
   reviewedBy      User?              @relation("OpportunityReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
@@ -679,4 +704,68 @@ model AuditLog {
   @@index([actorId])
   @@index([action])
   @@index([createdAt])
+}
+
+// ─── JOB LIKES & COMMENTS ─────────────────────────────────────────────────────
+
+model JobLike {
+  userId    String
+  jobId     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId],  references: [id], onDelete: Cascade)
+
+  @@id([userId, jobId])
+  @@index([jobId])
+}
+
+model JobComment {
+  id          String   @id @default(uuid())
+  jobId       String
+  authorId    String
+  content     String
+  isDeleted   Boolean  @default(false)
+  deletedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  job     Job      @relation(fields: [jobId],     references: [id], onDelete: Cascade)
+  author  User     @relation(fields: [authorId],  references: [id], onDelete: Cascade)
+  reports Report[]
+
+  @@index([jobId])
+  @@index([authorId])
+}
+
+// ─── OPPORTUNITY LIKES & COMMENTS ─────────────────────────────────────────────
+
+model OpportunityLike {
+  userId        String
+  opportunityId String
+  createdAt     DateTime @default(now())
+
+  user        User        @relation(fields: [userId],        references: [id], onDelete: Cascade)
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@id([userId, opportunityId])
+  @@index([opportunityId])
+}
+
+model OpportunityComment {
+  id            String   @id @default(uuid())
+  opportunityId String
+  authorId      String
+  content       String
+  isDeleted     Boolean  @default(false)
+  deletedById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  author      User        @relation(fields: [authorId],      references: [id], onDelete: Cascade)
+  reports     Report[]
+
+  @@index([opportunityId])
+  @@index([authorId])
 }

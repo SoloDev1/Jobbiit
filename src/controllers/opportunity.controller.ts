@@ -7,7 +7,7 @@ import {
   sendError,
 } from '../utils/apiResponse'
 import * as OppModel from '../models/Opportunity'
-import { notifyOpportunityMatch } from '../services/notification.service'
+import * as notificationService from '../services/notification.service'
 import {
   opportunitiesQuerySchema,
   type CreateOpportunityInput,
@@ -167,9 +167,15 @@ export async function approveOpportunity(req: Request, res: Response): Promise<v
     return
   }
 
-  void notifyOpportunityMatch(result.id, result.title).catch((err: unknown) => {
-    logger.error({ err, opportunityId: result.id }, 'notifyOpportunityMatch failed')
-  })
+ // ✅ Replace with this so the poster also gets told their listing is live:
+void notificationService.notifyOpportunityApproved(
+  result.id,
+  result.title,
+  result.posterId,   // you'll need posterId returned from approveOpportunity
+  userId(req),
+).catch((err: unknown) => {
+  logger.error({ err, opportunityId: result.id }, 'notifyOpportunityApproved failed')
+})
 
   logger.info({ userId: userId(req), opportunityId: parsed.data }, 'Opportunity approved')
   sendSuccess(res, result, 'Opportunity approved and published')

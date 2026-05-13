@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { OpportunityCategory } from '@prisma/client'
 
-const categoryEnum = z.nativeEnum(OpportunityCategory)
+const categoryEnum = z.nativeEnum(OpportunityCategory as typeof OpportunityCategory)
 
 const opportunityFields = z.object({
   title:          z.string().trim().min(1).max(300),
@@ -15,7 +15,11 @@ const opportunityFields = z.object({
   location:       z.string().trim().max(200).optional(),
 })
 
-export const createOpportunitySchema = opportunityFields.strict()
+export const createOpportunitySchema = opportunityFields
+ .extend({
+    skillIds: z.array(z.string().uuid()).max(20).optional(),
+  })
+.strict()
 
 export const updateOpportunitySchema = opportunityFields.partial().strict()
 

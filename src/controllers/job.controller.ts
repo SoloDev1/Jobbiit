@@ -8,13 +8,13 @@ import {
   sendNoContent,
 } from '../utils/apiResponse'
 import * as JobModel from '../models/Job'
-import { notifyJobMatch } from '../services/notification.service'
 import {
   jobsQuerySchema,
   type CreateJobInput,
   type UpdateJobInput,
   type ApplyJobInput,
 } from '../schemas/job.schema'
+import * as notificationService from '../services/notification.service'
 
 const uuidParam = z.string().uuid()
 
@@ -55,9 +55,15 @@ export async function createJob(req: Request, res: Response): Promise<void> {
 
   const job = await JobModel.createJob(userId(req), data)
 
-  void notifyJobMatch(job.id, job.title).catch((err: unknown) => {
-    logger.error({ err, jobId: job.id }, 'notifyJobMatch failed')
-  })
+   void notificationService.notifyJobCreated(
+  job.id,
+  job.title,
+  job.company,
+  userId(req),
+).catch((err: unknown) => {
+  logger.error({ err, jobId: job.id }, 'notifyJobCreated failed')
+})
+ 
 
   logger.info({ userId: userId(req), jobId: job.id }, 'Job created')
   sendCreated(res, job, 'Job created')
