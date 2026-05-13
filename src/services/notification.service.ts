@@ -4,18 +4,24 @@ import { prisma } from '../config/db'
 import * as NotificationModel from '../models/Notification'
 import * as pushService from './push.service'
 
-/**
- * Logical notification kinds (API / app layer). Mapped to Prisma `NotificationType`.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// KIND → PRISMA TYPE MAP
+// ─────────────────────────────────────────────────────────────────────────────
+// OPPORTUNITY_APPROVED has no dedicated Prisma enum value → stored as SYSTEM.
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const NOTIFICATION_TYPES = {
   NEW_CONNECTION_REQUEST:   'CONNECTION_REQUEST',
   CONNECTION_ACCEPTED:      'CONNECTION_ACCEPTED',
   POST_LIKED:               'POST_LIKE',
   POST_COMMENTED:           'POST_COMMENT',
   JOB_APPLICATION_RECEIVED: 'JOB_APPLICATION',
-  /** Prisma has no dedicated enum value — stored as SYSTEM. */
+  JOB_LIKED:                'JOB_LIKE',
+  JOB_COMMENTED:            'JOB_COMMENT',
   OPPORTUNITY_APPROVED:     'SYSTEM',
   OPPORTUNITY_MATCH:        'OPPORTUNITY_MATCH',
+  OPPORTUNITY_LIKED:        'OPPORTUNITY_LIKE',
+  OPPORTUNITY_COMMENTED:    'OPPORTUNITY_COMMENT',
   JOB_MATCH:                'JOB_MATCH',
 } as const
 
@@ -25,45 +31,38 @@ function toPrismaType(kind: NotificationKind): NotificationType {
   return NOTIFICATION_TYPES[kind] as NotificationType
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PUSH COPY
+// ─────────────────────────────────────────────────────────────────────────────
+
 const PUSH_COPY: Record<NotificationKind, { title: string; body: string }> = {
-  NEW_CONNECTION_REQUEST: {
-    title: 'New Connection Request',
-    body:  'Someone wants to connect with you',
-  },
-  CONNECTION_ACCEPTED: {
-    title: 'Connection Accepted',
-    body:  'Your connection request was accepted',
-  },
-  POST_LIKED: {
-    title: 'New Like',
-    body:  'Someone liked your post',
-  },
-  POST_COMMENTED: {
-    title: 'New Comment',
-    body:  'Someone commented on your post',
-  },
-  JOB_APPLICATION_RECEIVED: {
-    title: 'New Application',
-    body:  'Someone applied to your job posting',
-  },
-  OPPORTUNITY_APPROVED: {
-    title: 'Opportunity Approved',
-    body:  'Your opportunity listing has been approved',
-  },
-  OPPORTUNITY_MATCH: {
-    title: 'New Opportunity Match',
-    body:  'An opportunity matching your skills is now available',
-  },
-  JOB_MATCH: {
-    title: 'New Job Match',
-    body:  'A job matching your skills has been posted',
-  },
+  NEW_CONNECTION_REQUEST:   { title: 'New Connection Request',  body: 'Someone wants to connect with you' },
+  CONNECTION_ACCEPTED:      { title: 'Connection Accepted',     body: 'Your connection request was accepted' },
+  POST_LIKED:               { title: 'New Like',               body: 'Someone liked your post' },
+  POST_COMMENTED:           { title: 'New Comment',            body: 'Someone commented on your post' },
+  JOB_APPLICATION_RECEIVED: { title: 'New Application',        body: 'Someone applied to your job posting' },
+  JOB_LIKED:                { title: 'New Like',               body: 'Someone liked your job posting' },
+  JOB_COMMENTED:            { title: 'New Comment',            body: 'Someone commented on your job posting' },
+  OPPORTUNITY_APPROVED:     { title: 'Opportunity Approved',   body: 'Your opportunity listing has been approved and is now live' },
+  OPPORTUNITY_MATCH:        { title: 'New Opportunity Match',  body: 'An opportunity matching your skills is now available' },
+  OPPORTUNITY_LIKED:        { title: 'New Like',               body: 'Someone liked your opportunity listing' },
+  OPPORTUNITY_COMMENTED:    { title: 'New Comment',            body: 'Someone commented on your opportunity listing' },
+  JOB_MATCH:                { title: 'New Job Posted',         body: 'A new job has just been posted' },
 }
 
-/**
- * Create an in-app notification for a recipient, then enqueue Expo push (best-effort).
- * Fire-and-forget from controllers — DB + push errors are logged only.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// createNotification — CORE PRIMITIVE
+// ─────────────────────────────────────────────────────────────────────────────
+// Writes one Notification row then fires an Expo push (best-effort).
+// Always call without await — fire-and-forget.
+//
+// recipientId  — User.id who receives it
+// kind         — app-layer kind key (maps to Prisma NotificationType)
+// message      — text stored on the Notification row
+// entityId     — id of the Job / Opportunity / Post being referenced
+// triggerId    — User.id who caused the event (the actor)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function createNotification(
   recipientId: string,
   kind:        NotificationKind,
@@ -73,136 +72,203 @@ export function createNotification(
 ): void {
   void (async () => {
     try {
-      const type = toPrismaType(kind)
       const row = await NotificationModel.createNotification(
         recipientId,
-        type,
+        toPrismaType(kind),
         message,
         entityId,
         triggerId,
       )
 
-      const copy = PUSH_COPY[kind]
-      void pushService.sendPushToUser(recipientId, copy.title, copy.body, {
+      const { title, body } = PUSH_COPY[kind]
+      void pushService.sendPushToUser(recipientId, title, body, {
         kind,
         entityId:       entityId ?? null,
         notificationId: row.id,
       })
     } catch (err) {
-      logger.error({ err, recipientId, kind, entityId }, 'createNotification failed')
+      logger.error({ err, recipientId, kind, entityId, triggerId }, 'createNotification failed')
     }
   })()
 }
 
-/**
- * Fan-out when a new post is published (connections, push, in-app notifications).
- */
-export async function notifyNewPost(postId: string, authorId: string): Promise<void> {
-  try {
-    logger.debug({ postId, authorId }, 'notifyNewPost (reserved)')
-  } catch (err) {
-    logger.error({ err, postId, authorId }, 'notifyNewPost failed')
-  }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// notifyJobCreated — ALL USERS
+// ─────────────────────────────────────────────────────────────────────────────
+// Triggered when a new job is posted.
+// Notifies every active, non-banned user in batches of 500.
+// The poster is excluded — they don't need to be told about their own job.
+//
+// Strategy: cursor-based pagination over User table so we never load all
+// user IDs into memory at once.
+//
+// Call site (job controller, fire-and-forget):
+//   void notifyJobCreated(job.id, job.title, job.company, req.user.id)
+// ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Fan-out OPPORTUNITY_MATCH notifications to all users whose profile skills
- * overlap the opportunity's skills. Capped at 500 recipients. Fire-and-forget safe.
- */
-// export async function notifyOpportunityMatch(
-//   opportunityId: string,
-//   title:         string,
-// ): Promise<void> {
-//   try {
-//     const skillIds = await prisma.opportunitySkill
-//       .findMany({ where: { opportunityId }, select: { skillId: true } })
-//       .then((rows) => rows.map((r) => r.skillId))
-
-//     if (skillIds.length === 0) return
-
-//     const userIds = await prisma.profileSkill
-//       .findMany({
-//         where:    { skillId: { in: skillIds } },
-//         select:   { profile: { select: { userId: true } } },
-//         distinct: ['profileId'],
-//         take:     500,
-//       })
-//       .then((rows) => rows.map((r) => r.profile.userId))
-
-//     if (userIds.length === 0) return
-
-//     const message = `"${title}" matches your skills`
-//     for (const recipientId of userIds) {
-//       createNotification(recipientId, 'OPPORTUNITY_MATCH', message, opportunityId)
-//     }
-
-//     logger.info({ opportunityId, recipientCount: userIds.length }, 'Opportunity match notifications sent')
-//   } catch (err) {
-//     logger.error({ err, opportunityId }, 'notifyOpportunityMatch failed')
-//   }
-// }
-
-/**
- * Fan-out JOB_MATCH notifications to all users whose profile skills
- * overlap the job's skills. Capped at 500 recipients. Fire-and-forget safe.
- */
-export async function notifyJobMatch(jobId: string, title: string): Promise<void> {
-  try {
-    const message = `New job "${title}" is now available`
-    const BATCH_SIZE = 100
-    let cursor: string | undefined = undefined
-
-    while (true) {
-      const rows: any = await prisma.user.findMany({
-        select: { id: true },
-        take: BATCH_SIZE,
-        ...(cursor && { skip: 1, cursor: { id: cursor } }),
-      })
-
-      if (rows.length === 0) break
-
-      for (const row of rows) {
-        createNotification(row.id, 'JOB_MATCH', message, jobId)
-      }
-
-      if (rows.length < BATCH_SIZE) break
-      cursor = rows[rows.length - 1].id
-    }
-
-    logger.info({ jobId, title }, 'notifyJobMatch: all users notified')
-  } catch (err) {
-    logger.error({ err, jobId, title }, 'notifyJobMatch failed')
-  }
-}
-
-export async function notifyOpportunityMatch(
-  opportunityId: string,
-  title: string,
+export async function notifyJobCreated(
+  jobId:    string,
+  title:    string,
+  company:  string,
+  posterId: string,
 ): Promise<void> {
   try {
-    const message = `New opportunity "${title}" is now available`
-    const BATCH_SIZE = 100
-    let cursor: string | undefined = undefined
+    const BATCH_SIZE = 500
+    const message    = `New job "${title}" at ${company} has just been posted`
+    let   cursor: string | undefined
 
     while (true) {
-      const rows : { id: string }[] = await prisma.user.findMany({
+      const users = await prisma.user.findMany({
+        where: {
+          isActive: true,
+          isBanned: false,
+          id:       { not: posterId },       // exclude the poster
+        },
         select: { id: true },
-        take: BATCH_SIZE,
-        ...(cursor && { skip: 1, cursor: { id: cursor } }),
+        take:   BATCH_SIZE,
+        ...(cursor
+          ? { skip: 1, cursor: { id: cursor } }
+          : {}),
+        orderBy: { id: 'asc' },              // stable order required for cursor pagination
       })
 
-      if (rows.length === 0) break
+      if (users.length === 0) break
 
-      for (const row of rows) {
-        createNotification(row.id, 'OPPORTUNITY_MATCH', message, opportunityId)
+      for (const user of users) {
+        createNotification(user.id, 'JOB_MATCH', message, jobId)
       }
 
-      if (rows.length < BATCH_SIZE) break
-      cursor = rows[rows.length - 1].id
+      if (users.length < BATCH_SIZE) break   // last page
+      cursor = users[users.length - 1].id
     }
 
-    logger.info({ opportunityId, title }, 'notifyOpportunityMatch: all users notified')
+    logger.info({ jobId, title, company }, 'notifyJobCreated: all users notified')
+  } catch (err) {
+    logger.error({ err, jobId, title }, 'notifyJobCreated failed')
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// notifyOpportunityApproved — POSTER + SKILL-MATCHED USERS
+// ─────────────────────────────────────────────────────────────────────────────
+// Triggered when an admin approves an opportunity. Does TWO things:
+//
+//   1. Notifies the POSTER that their listing is now live.
+//      approverId stored as Notification.triggerId so the poster can see who approved.
+//
+//   2. Fan-out OPPORTUNITY_MATCH to all users whose ProfileSkill overlaps
+//      the opportunity's OpportunitySkill rows (skill-based, capped at 500).
+//
+// ⚠️  OpportunitySkill rows must exist before calling this.
+//     Attach skills when the opportunity is created so they're ready at approval time.
+//
+// Call site (admin opportunity controller, fire-and-forget):
+//   void notifyOpportunityApproved(opp.id, opp.title, opp.posterId, req.user.id)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function notifyOpportunityApproved(
+  opportunityId: string,
+  title:         string,
+  posterId:      string,
+  approverId:    string,
+): Promise<void> {
+  try {
+    // 1 — tell the poster their listing is live
+    createNotification(
+      posterId,
+      'OPPORTUNITY_APPROVED',
+      `Your opportunity "${title}" has been approved and is now live`,
+      opportunityId,
+      approverId,
+    )
+
+    logger.info({ opportunityId, posterId, approverId }, 'notifyOpportunityApproved: poster notified')
+
+    // 2 — skill-match fan-out to other users
+    await notifyOpportunityMatch(opportunityId, title, posterId)
+  } catch (err) {
+    logger.error({ err, opportunityId, posterId, approverId }, 'notifyOpportunityApproved failed')
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// notifyOpportunityMatch — SKILL-MATCHED USERS (internal + exported)
+// ─────────────────────────────────────────────────────────────────────────────
+// Finds users whose ProfileSkill overlaps the opportunity's OpportunitySkill
+// rows and sends each an OPPORTUNITY_MATCH notification + push.
+//
+// excludeUserId — prevents the poster from receiving a match notification
+//                 on top of their OPPORTUNITY_APPROVED notification.
+//
+// Called internally by notifyOpportunityApproved.
+// Also exported for direct use if needed (e.g. re-notify after attaching
+// new skills to an already-live opportunity).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function notifyOpportunityMatch(
+  opportunityId:  string,
+  title:          string,
+  excludeUserId?: string,
+): Promise<void> {
+  try {
+    // Step 1 — which skills does this opportunity require?
+    const skillIds = await prisma.opportunitySkill
+      .findMany({ where: { opportunityId }, select: { skillId: true } })
+      .then((rows) => rows.map((r) => r.skillId))
+
+    if (skillIds.length === 0) {
+      logger.debug({ opportunityId }, 'notifyOpportunityMatch: no skills attached — skipping')
+      return
+    }
+
+    // Step 2 — find users with at least one matching skill
+    // distinct profileId prevents duplicates when a user has multiple matching skills
+    const userIds = await prisma.profileSkill
+      .findMany({
+        where: {
+          skillId:            { in: skillIds },
+          profile: {
+            user: {
+              isActive: true,
+              isBanned: false,
+              ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
+            },
+          },
+        },
+        select:   { profile: { select: { userId: true } } },
+        distinct: ['profileId'],
+        take:     500,
+      })
+      .then((rows) => rows.map((r) => r.profile.userId))
+
+    if (userIds.length === 0) {
+      logger.debug({ opportunityId }, 'notifyOpportunityMatch: no matching users — skipping')
+      return
+    }
+
+    // Step 3 — notify each matched user
+    const message = `New opportunity "${title}" matches your skills`
+    for (const recipientId of userIds) {
+      createNotification(recipientId, 'OPPORTUNITY_MATCH', message, opportunityId)
+    }
+
+    logger.info(
+      { opportunityId, title, recipientCount: userIds.length },
+      'notifyOpportunityMatch: done',
+    )
   } catch (err) {
     logger.error({ err, opportunityId, title }, 'notifyOpportunityMatch failed')
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// notifyNewPost — reserved for connection feed fan-out (post-MVP)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function notifyNewPost(postId: string, authorId: string): Promise<void> {
+  try {
+    logger.debug({ postId, authorId }, 'notifyNewPost: reserved for connection feed fan-out')
+  } catch (err) {
+    logger.error({ err, postId, authorId }, 'notifyNewPost failed')
   }
 }
