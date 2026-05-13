@@ -2,8 +2,6 @@ import { prisma } from '../config/db'
 import { JobStatus, JobType } from '@prisma/client'
 import type { Prisma } from '@prisma/client'
 import type { CreateJobInput, UpdateJobInput, ApplyJobInput } from '../schemas/job.schema'
-import * as notificationService from '../services/notification.service'
-import * as JobModel from '../models/Job'
 
 // ─── Salary serialisation ─────────────────────────────────────────────────────
 // The Prisma model stores salary as a single nullable JSON string.
@@ -506,15 +504,3 @@ export async function adminUpdateJob(
 
 
 
-export async function handleCreateJob(req, res) {
-  const job = await JobModel.createJob(req.user.id, req.body)
-
-  // Attach skills first if provided, then fan-out match notifications
-  if (req.body.skillIds?.length) {
-    await JobModel.attachSkills(job.id, req.user.id, req.body.skillIds)
-    // Fire-and-forget — won't block the response
-    void notificationService.notifyJobMatch(job.id, job.title)
-  }
-
-  res.status(201).json(job)
-}
