@@ -73,7 +73,7 @@ export function createNotification(
 ): void {
   void (async () => {
     try {
-      logger.info({ recipientId, kind }, '🔔 createNotification: writing row') // ADD THIS
+      logger.info({ recipientId, kind }, '🔔 createNotification: writing row')
       const row = await NotificationModel.createNotification(
         recipientId,
         toPrismaType(kind),
@@ -81,9 +81,17 @@ export function createNotification(
         entityId,
         triggerId,
       )
-      logger.info({ rowId: row.id, recipientId, kind }, '🔔 createNotification: row written') // ADD THIS
+      logger.info({ rowId: row.id, recipientId, kind }, '🔔 createNotification: row written')
+
+      // ✅ Push call must be here
+      const { title, body } = PUSH_COPY[kind]
+      void pushService.sendPushToUser(recipientId, title, body, {
+        kind,
+        entityId:       entityId ?? null,
+        notificationId: row.id,
+      })
     } catch (err) {
-      logger.error({ err, recipientId, kind, entityId, triggerId }, 'createNotification failed') // already exists?
+      logger.error({ err, recipientId, kind, entityId, triggerId }, 'createNotification failed')
     }
   })()
 }
