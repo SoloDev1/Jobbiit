@@ -63,15 +63,17 @@ const PUSH_COPY: Record<NotificationKind, { title: string; body: string }> = {
 // triggerId    — User.id who caused the event (the actor)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// notification.service.ts
 export function createNotification(
   recipientId: string,
-  kind:        NotificationKind,
-  message:     string,
-  entityId?:   string,
-  triggerId?:  string,
+  kind: NotificationKind,
+  message: string,
+  entityId?: string,
+  triggerId?: string,
 ): void {
   void (async () => {
     try {
+      logger.info({ recipientId, kind }, '🔔 createNotification: writing row') // ADD THIS
       const row = await NotificationModel.createNotification(
         recipientId,
         toPrismaType(kind),
@@ -79,19 +81,13 @@ export function createNotification(
         entityId,
         triggerId,
       )
-
-      const { title, body } = PUSH_COPY[kind]
-      void pushService.sendPushToUser(recipientId, title, body, {
-        kind,
-        entityId:       entityId ?? null,
-        notificationId: row.id,
-      })
+      logger.info({ rowId: row.id, recipientId, kind }, '🔔 createNotification: row written') // ADD THIS
+      ...
     } catch (err) {
-      logger.error({ err, recipientId, kind, entityId, triggerId }, 'createNotification failed')
+      logger.error({ err, recipientId, kind, entityId, triggerId }, 'createNotification failed') // already exists?
     }
   })()
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // notifyJobCreated — ALL USERS
 // ─────────────────────────────────────────────────────────────────────────────
