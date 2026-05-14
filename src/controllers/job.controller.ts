@@ -52,19 +52,12 @@ export async function getJobs(req: Request, res: Response): Promise<void> {
 
 export async function createJob(req: Request, res: Response): Promise<void> {
   const data = req.body as CreateJobInput
-
-  const job = await JobModel.createJob(userId(req), data)
-
-   void notificationService.notifyJobCreated(
-  job.id,
-  job.title,
-  job.company,
-  userId(req),
-).catch((err: unknown) => {
-  logger.error({ err, jobId: job.id }, 'notifyJobCreated failed')
-})
+  const job  = await JobModel.createJob(userId(req), data)
  
-
+  // Fire-and-forget — do NOT await, do NOT .catch() — notifyJobCreated
+  // handles all its own errors internally and never throws to the caller.
+  void notificationService.notifyJobCreated(job.id, job.title, job.company, userId(req))
+ 
   logger.info({ userId: userId(req), jobId: job.id }, 'Job created')
   sendCreated(res, job, 'Job created')
 }
