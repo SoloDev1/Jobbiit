@@ -113,6 +113,8 @@ export async function notifyJobCreated(
   posterId: string,
 ): Promise<void> {
   try {
+
+logger.info({ jobId, title }, '🔔 notifyJobCreated: ENTERED') 
     const BATCH_SIZE = 500
     const message    = `New job "${title}" at ${company} has just been posted`
     let   cursor: string | undefined
@@ -174,6 +176,9 @@ export async function notifyOpportunityApproved(
 ): Promise<void> {
   try {
     // 1 — tell the poster their listing is live
+
+    logger.info({ opportunityId, title }, '🔔 notifyOpportunityApproved: ENTERED') 
+
     createNotification(
       posterId,
       'OPPORTUNITY_APPROVED',
@@ -212,6 +217,7 @@ export async function notifyOpportunityMatch(
 ): Promise<void> {
   try {
     // Step 1 — which skills does this opportunity require?
+    logger.info({ opportunityId, title }, '🔔 notifyOpportunityMatch: ENTERED') 
     const skillIds = await prisma.opportunitySkill
       .findMany({ where: { opportunityId }, select: { skillId: true } })
       .then((rows) => rows.map((r) => r.skillId))

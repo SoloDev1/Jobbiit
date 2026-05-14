@@ -76,6 +76,8 @@ app.use(hpp())
 app.use(compression())
 app.use(globalLimiter)
 
+app.set('trust proxy', 1) 
+
 // ─── 2. Request hygiene middleware ────────────────────────────────────────────
 
 // Attach a unique ID to every request so logs can be correlated end-to-end.
