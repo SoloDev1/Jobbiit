@@ -82,7 +82,6 @@ export function createNotification(
         triggerId,
       )
       logger.info({ rowId: row.id, recipientId, kind }, '🔔 createNotification: row written') // ADD THIS
-      ...
     } catch (err) {
       logger.error({ err, recipientId, kind, entityId, triggerId }, 'createNotification failed') // already exists?
     }
