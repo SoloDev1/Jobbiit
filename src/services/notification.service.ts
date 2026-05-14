@@ -164,7 +164,7 @@ logger.info({ jobId, title }, '🔔 notifyJobCreated: ENTERED')
         where: {
           isActive: true,
           isBanned: false,
-          id:       { not: posterId },       // exclude the poster
+          // id:       { not: posterId },       // exclude the poster
         },
         select: { id: true },
         take:   BATCH_SIZE,
@@ -215,10 +215,9 @@ export async function notifyOpportunityApproved(
   approverId:    string,
 ): Promise<void> {
   try {
+    logger.info({ opportunityId, title }, '🔔 notifyOpportunityApproved: ENTERED')
+
     // 1 — tell the poster their listing is live
-
-    logger.info({ opportunityId, title }, '🔔 notifyOpportunityApproved: ENTERED') 
-
     await createNotification(
       posterId,
       'OPPORTUNITY_APPROVED',
@@ -227,10 +226,35 @@ export async function notifyOpportunityApproved(
       approverId,
     )
 
-    logger.info({ opportunityId, posterId, approverId }, 'notifyOpportunityApproved: poster notified')
+    // 2 — MVP: broadcast to ALL users except poster and approver
+    const BATCH_SIZE = 500
+    const message    = `New opportunity "${title}" is now available`
+    let   cursor: string | undefined
 
-    // 2 — skill-match fan-out to other users
-    await notifyOpportunityMatch(opportunityId, title, posterId)
+    while (true) {
+      const users = await prisma.user.findMany({
+        where: {
+          isActive: true,
+          isBanned: false,
+          //id:       { notIn: [posterId, approverId] },
+        },
+        select:  { id: true },
+        take:    BATCH_SIZE,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        orderBy: { id: 'asc' },
+      })
+
+      if (users.length === 0) break
+
+      for (const user of users) {
+        await createNotification(user.id, 'OPPORTUNITY_MATCH', message, opportunityId)
+      }
+
+      if (users.length < BATCH_SIZE) break
+      cursor = users[users.length - 1].id
+    }
+
+    logger.info({ opportunityId, title }, 'notifyOpportunityApproved: all users notified')
   } catch (err) {
     logger.error({ err, opportunityId, posterId, approverId }, 'notifyOpportunityApproved failed')
   }

@@ -168,15 +168,9 @@ export async function approveOpportunity(req: Request, res: Response): Promise<v
   }
  
   // Fire-and-forget — same pattern as createJob above
-  await notificationService.notifyOpportunityApproved(
-    result.id,
-    result.title,
-    result.posterId,
-    userId(req),
-  )
- 
-  logger.info({ userId: userId(req), opportunityId: parsed.data }, 'Opportunity approved')
-  sendSuccess(res, result, 'Opportunity approved and published')
+notificationService.notifyOpportunityApproved(result.id, result.title, result.posterId, userId(req))
+logger.info({ userId: userId(req), opportunityId: parsed.data }, 'Opportunity approved')
+sendSuccess(res, result, 'Opportunity approved and published') 
 }
 
 export async function rejectOpportunity(req: Request, res: Response): Promise<void> {
