@@ -85,7 +85,7 @@ export function createNotification(
 
       // ✅ Push call must be here
       const { title, body } = PUSH_COPY[kind]
-      void pushService.sendPushToUser(recipientId, title, body, {
+      void pushService.sendPushToUsers([recipientId], title, body, {
         kind,
         entityId:       entityId ?? null,
         notificationId: row.id,
