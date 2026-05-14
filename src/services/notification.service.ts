@@ -64,36 +64,73 @@ const PUSH_COPY: Record<NotificationKind, { title: string; body: string }> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // notification.service.ts
-export function createNotification(
+export async function createNotification(
   recipientId: string,
   kind: NotificationKind,
   message: string,
   entityId?: string,
   triggerId?: string,
-): void {
-  void (async () => {
-    try {
-      logger.info({ recipientId, kind }, '🔔 createNotification: writing row')
-      const row = await NotificationModel.createNotification(
+): Promise<void> {
+  try {
+    logger.info(
+      { recipientId, kind, entityId },
+      '🔔 createNotification START',
+    )
+
+    const prismaType = toPrismaType(kind)
+
+    logger.info(
+      { prismaType },
+      '🔔 mapped prisma type',
+    )
+
+    const row = await NotificationModel.createNotification(
+      recipientId,
+      prismaType,
+      message,
+      entityId,
+      triggerId,
+    )
+
+    logger.info(
+      { rowId: row.id },
+      '🔔 notification row created',
+    )
+
+    const { title, body } = PUSH_COPY[kind]
+
+    logger.info(
+      { recipientId, title },
+      '🔔 sending push',
+    )
+
+    await pushService.sendPushToUsers(
+      [recipientId],
+      title,
+      body,
+      {
+        kind,
+        entityId: entityId ?? null,
+        notificationId: row.id,
+      },
+    )
+
+    logger.info(
+      { recipientId },
+      '🔔 push sent successfully',
+    )
+  } catch (err) {
+    logger.error(
+      {
+        err,
         recipientId,
-        toPrismaType(kind),
-        message,
+        kind,
         entityId,
         triggerId,
-      )
-      logger.info({ rowId: row.id, recipientId, kind }, '🔔 createNotification: row written')
-
-      // ✅ Push call must be here
-      const { title, body } = PUSH_COPY[kind]
-      void pushService.sendPushToUsers([recipientId], title, body, {
-        kind,
-        entityId:       entityId ?? null,
-        notificationId: row.id,
-      })
-    } catch (err) {
-      logger.error({ err, recipientId, kind, entityId, triggerId }, 'createNotification failed')
-    }
-  })()
+      },
+      '❌ createNotification FAILED',
+    )
+  }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 // notifyJobCreated — ALL USERS
@@ -140,7 +177,7 @@ logger.info({ jobId, title }, '🔔 notifyJobCreated: ENTERED')
       if (users.length === 0) break
 
       for (const user of users) {
-        createNotification(user.id, 'JOB_MATCH', message, jobId)
+        await createNotification(user.id, 'JOB_MATCH', message, jobId)
       }
 
       if (users.length < BATCH_SIZE) break   // last page
@@ -182,7 +219,7 @@ export async function notifyOpportunityApproved(
 
     logger.info({ opportunityId, title }, '🔔 notifyOpportunityApproved: ENTERED') 
 
-    createNotification(
+    await createNotification(
       posterId,
       'OPPORTUNITY_APPROVED',
       `Your opportunity "${title}" has been approved and is now live`,
@@ -258,7 +295,7 @@ export async function notifyOpportunityMatch(
     // Step 3 — notify each matched user
     const message = `New opportunity "${title}" matches your skills`
     for (const recipientId of userIds) {
-      createNotification(recipientId, 'OPPORTUNITY_MATCH', message, opportunityId)
+      await createNotification(recipientId, 'OPPORTUNITY_MATCH', message, opportunityId)
     }
 
     logger.info(

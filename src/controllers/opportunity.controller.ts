@@ -168,7 +168,7 @@ export async function approveOpportunity(req: Request, res: Response): Promise<v
   }
  
   // Fire-and-forget — same pattern as createJob above
-  void notificationService.notifyOpportunityApproved(
+  await notificationService.notifyOpportunityApproved(
     result.id,
     result.title,
     result.posterId,
