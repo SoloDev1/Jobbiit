@@ -7,8 +7,9 @@
     "dev": "nodemon --exec tsx src/app.ts",
     "build": "tsc",
     "postinstall": "prisma generate && npm run build",
-    "start": "npx prisma migrate deploy && node dist/app.js",
+    "start": "node dist/app.js",
     "migrate": "prisma migrate dev",
+    "predeploy": "npx prisma migrate deploy",
     "generate": "prisma generate",
     "make-super-admin": "tsx src/scripts/make-super-admin.ts",
     "test": "vitest"
