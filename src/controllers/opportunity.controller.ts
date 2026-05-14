@@ -5,8 +5,10 @@ import {
   sendSuccess,
   sendCreated,
   sendError,
+  sendNoContent,
 } from '../utils/apiResponse'
 import * as OppModel from '../models/Opportunity'
+import * as OppInteractions from '../models/opportunity-interactions.model'
 import * as notificationService from '../services/notification.service'
 import {
   opportunitiesQuerySchema,
@@ -160,17 +162,16 @@ export async function approveOpportunity(req: Request, res: Response): Promise<v
     sendError(res, 'Invalid opportunity id', 400, 'INVALID_ID')
     return
   }
- 
+
   const result = await OppModel.approveOpportunity(parsed.data)
   if (!result) {
     sendError(res, 'Opportunity not found', 404, 'NOT_FOUND')
     return
   }
- 
-  // Fire-and-forget — same pattern as createJob above
-notificationService.notifyOpportunityApproved(result.id, result.title, result.posterId, userId(req))
-logger.info({ userId: userId(req), opportunityId: parsed.data }, 'Opportunity approved')
-sendSuccess(res, result, 'Opportunity approved and published') 
+
+  notificationService.notifyOpportunityApproved(result.id, result.title, result.posterId, userId(req))
+  logger.info({ userId: userId(req), opportunityId: parsed.data }, 'Opportunity approved')
+  sendSuccess(res, result, 'Opportunity approved and published')
 }
 
 export async function rejectOpportunity(req: Request, res: Response): Promise<void> {
@@ -190,4 +191,101 @@ export async function rejectOpportunity(req: Request, res: Response): Promise<vo
 
   logger.info({ userId: userId(req), opportunityId: parsed.data }, 'Opportunity rejected')
   sendSuccess(res, result, 'Opportunity rejected')
+}
+
+// ─── toggleOpportunityLike ────────────────────────────────────────────────────
+
+export async function toggleOpportunityLike(req: Request, res: Response): Promise<void> {
+  const parsed = uuidParam.safeParse(req.params.id)
+  if (!parsed.success) {
+    sendError(res, 'Invalid opportunity id', 400, 'INVALID_ID')
+    return
+  }
+
+  const result = await OppInteractions.toggleOpportunityLike(parsed.data, userId(req))
+  if (!result) {
+    sendError(res, 'Opportunity not found', 404, 'NOT_FOUND')
+    return
+  }
+
+  sendSuccess(res, { liked: result.liked, count: result.count }, result.liked ? 'Opportunity liked' : 'Opportunity unliked')
+}
+
+// ─── getOpportunityComments ───────────────────────────────────────────────────
+
+const commentsQuerySchema = z.object({
+  cursor: z.string().optional(),
+  limit:  z.coerce.number().int().positive().max(50).default(20),
+})
+
+export async function getOpportunityComments(req: Request, res: Response): Promise<void> {
+  const idParsed = uuidParam.safeParse(req.params.id)
+  if (!idParsed.success) {
+    sendError(res, 'Invalid opportunity id', 400, 'INVALID_ID')
+    return
+  }
+
+  const { cursor, limit } = commentsQuerySchema.catch({ limit: 20 }).parse(req.query)
+
+  const result = await OppInteractions.getOpportunityComments(idParsed.data, cursor, limit)
+  sendSuccess(res, result, 'Comments loaded')
+}
+
+// ─── addOpportunityComment ────────────────────────────────────────────────────
+
+const commentBodySchema = z.object({
+  content: z.string().trim().min(1).max(1000),
+})
+
+export async function addOpportunityComment(req: Request, res: Response): Promise<void> {
+  const idParsed = uuidParam.safeParse(req.params.id)
+  if (!idParsed.success) {
+    sendError(res, 'Invalid opportunity id', 400, 'INVALID_ID')
+    return
+  }
+
+  const parsed = commentBodySchema.safeParse(req.body)
+  if (!parsed.success) {
+    sendError(res, 'Validation failed', 422, 'VALIDATION_ERROR', parsed.error.flatten())
+    return
+  }
+
+  const result = await OppInteractions.addOpportunityComment(idParsed.data, userId(req), parsed.data.content)
+  if (!result) {
+    sendError(res, 'Opportunity not found', 404, 'NOT_FOUND')
+    return
+  }
+
+  logger.info({ userId: userId(req), opportunityId: idParsed.data }, 'Opportunity comment added')
+  sendCreated(res, result, 'Comment added')
+}
+
+// ─── deleteOpportunityComment ─────────────────────────────────────────────────
+
+export async function deleteOpportunityComment(req: Request, res: Response): Promise<void> {
+  const idParsed        = uuidParam.safeParse(req.params.id)
+  const commentIdParsed = uuidParam.safeParse(req.params.commentId)
+  if (!idParsed.success || !commentIdParsed.success) {
+    sendError(res, 'Invalid id', 400, 'INVALID_ID')
+    return
+  }
+
+  const result = await OppInteractions.deleteOpportunityComment(
+    commentIdParsed.data,
+    idParsed.data,
+    userId(req),
+    { allowAdmin: false },
+  )
+
+  if (result === 'not_found') {
+    sendError(res, 'Comment not found', 404, 'NOT_FOUND')
+    return
+  }
+  if (result === 'forbidden') {
+    sendError(res, 'Forbidden', 403, 'FORBIDDEN')
+    return
+  }
+
+  logger.info({ userId: userId(req), opportunityId: idParsed.data, commentId: commentIdParsed.data }, 'Opportunity comment deleted')
+  sendNoContent(res)
 }

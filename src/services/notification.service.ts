@@ -107,7 +107,7 @@ export async function createNotification(
     await pushService.sendPushToUsers(
       [recipientId],
       title,
-      body,
+      message, 
       {
         kind,
         entityId: entityId ?? null,

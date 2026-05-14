@@ -8,6 +8,7 @@ import {
   sendNoContent,
 } from '../utils/apiResponse'
 import * as JobModel from '../models/Job'
+import * as JobInteractions from '../models/job-interactions.model'
 import {
   jobsQuerySchema,
   type CreateJobInput,
@@ -53,12 +54,10 @@ export async function getJobs(req: Request, res: Response): Promise<void> {
 export async function createJob(req: Request, res: Response): Promise<void> {
   const data = req.body as CreateJobInput
   const job  = await JobModel.createJob(userId(req), data)
- 
-  // Fire-and-forget — do NOT await, do NOT .catch() — notifyJobCreated
-  // handles all its own errors internally and never throws to the caller.
-notificationService.notifyJobCreated(job.id, job.title, job.company, userId(req))
-logger.info({ userId: userId(req), jobId: job.id }, 'Job created')
-sendCreated(res, job, 'Job created') 
+
+  notificationService.notifyJobCreated(job.id, job.title, job.company, userId(req))
+  logger.info({ userId: userId(req), jobId: job.id }, 'Job created')
+  sendCreated(res, job, 'Job created')
 }
 
 // ─── getJobById ───────────────────────────────────────────────────────────────
@@ -88,7 +87,7 @@ export async function updateJob(req: Request, res: Response): Promise<void> {
     return
   }
 
-  const data = req.body as UpdateJobInput
+  const data   = req.body as UpdateJobInput
   const result = await JobModel.updateJob(parsed.data, userId(req), data)
 
   if (result === null) {
@@ -260,5 +259,102 @@ export async function detachJobSkill(req: Request, res: Response): Promise<void>
   }
 
   logger.info({ userId: userId(req), jobId: idParsed.data, skillId: skillIdParsed.data }, 'Job skill detached')
+  sendNoContent(res)
+}
+
+// ─── toggleJobLike ────────────────────────────────────────────────────────────
+
+export async function toggleJobLike(req: Request, res: Response): Promise<void> {
+  const parsed = uuidParam.safeParse(req.params.id)
+  if (!parsed.success) {
+    sendError(res, 'Invalid job id', 400, 'INVALID_ID')
+    return
+  }
+
+  const result = await JobInteractions.toggleJobLike(parsed.data, userId(req))
+  if (!result) {
+    sendError(res, 'Job not found', 404, 'NOT_FOUND')
+    return
+  }
+
+  sendSuccess(res, { liked: result.liked, count: result.count }, result.liked ? 'Job liked' : 'Job unliked')
+}
+
+// ─── getJobComments ───────────────────────────────────────────────────────────
+
+const commentsQuerySchema = z.object({
+  cursor: z.string().optional(),
+  limit:  z.coerce.number().int().positive().max(50).default(20),
+})
+
+export async function getJobComments(req: Request, res: Response): Promise<void> {
+  const idParsed = uuidParam.safeParse(req.params.id)
+  if (!idParsed.success) {
+    sendError(res, 'Invalid job id', 400, 'INVALID_ID')
+    return
+  }
+
+  const { cursor, limit } = commentsQuerySchema.catch({ limit: 20 }).parse(req.query)
+
+  const result = await JobInteractions.getJobComments(idParsed.data, cursor, limit)
+  sendSuccess(res, result, 'Comments loaded')
+}
+
+// ─── addJobComment ────────────────────────────────────────────────────────────
+
+const commentBodySchema = z.object({
+  content: z.string().trim().min(1).max(1000),
+})
+
+export async function addJobComment(req: Request, res: Response): Promise<void> {
+  const idParsed = uuidParam.safeParse(req.params.id)
+  if (!idParsed.success) {
+    sendError(res, 'Invalid job id', 400, 'INVALID_ID')
+    return
+  }
+
+  const parsed = commentBodySchema.safeParse(req.body)
+  if (!parsed.success) {
+    sendError(res, 'Validation failed', 422, 'VALIDATION_ERROR', parsed.error.flatten())
+    return
+  }
+
+  const result = await JobInteractions.addJobComment(idParsed.data, userId(req), parsed.data.content)
+  if (!result) {
+    sendError(res, 'Job not found', 404, 'NOT_FOUND')
+    return
+  }
+
+  logger.info({ userId: userId(req), jobId: idParsed.data }, 'Job comment added')
+  sendCreated(res, result, 'Comment added')
+}
+
+// ─── deleteJobComment ─────────────────────────────────────────────────────────
+
+export async function deleteJobComment(req: Request, res: Response): Promise<void> {
+  const idParsed        = uuidParam.safeParse(req.params.id)
+  const commentIdParsed = uuidParam.safeParse(req.params.commentId)
+  if (!idParsed.success || !commentIdParsed.success) {
+    sendError(res, 'Invalid id', 400, 'INVALID_ID')
+    return
+  }
+
+  const result = await JobInteractions.deleteJobComment(
+    commentIdParsed.data,
+    idParsed.data,
+    userId(req),
+    { allowAdmin: false },
+  )
+
+  if (result === 'not_found') {
+    sendError(res, 'Comment not found', 404, 'NOT_FOUND')
+    return
+  }
+  if (result === 'forbidden') {
+    sendError(res, 'Forbidden', 403, 'FORBIDDEN')
+    return
+  }
+
+  logger.info({ userId: userId(req), jobId: idParsed.data, commentId: commentIdParsed.data }, 'Job comment deleted')
   sendNoContent(res)
 }

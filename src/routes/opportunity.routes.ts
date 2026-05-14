@@ -50,4 +50,11 @@ router.post(
   OppController.rejectOpportunity,
 )
 
+// Social interaction 
+
+router.post('/:id/like',                        OppController.toggleOpportunityLike)
+router.get('/:id/comments',                     OppController.getOpportunityComments)
+router.post('/:id/comments',                    OppController.addOpportunityComment)
+router.delete('/:id/comments/:commentId',       OppController.deleteOpportunityComment)
+
 export default router

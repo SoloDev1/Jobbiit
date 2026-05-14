@@ -29,4 +29,10 @@ router.get('/:id/applications',     JobController.getApplications)
 router.post('/:id/skills',          JobController.attachJobSkills)
 router.delete('/:id/skills/:skillId', JobController.detachJobSkill)
 
+// Social interaction routes 
+router.post('/:id/like',                        JobController.toggleJobLike)
+router.get('/:id/comments',                     JobController.getJobComments)
+router.post('/:id/comments',                    JobController.addJobComment)
+router.delete('/:id/comments/:commentId',       JobController.deleteJobComment)
+
 export default router

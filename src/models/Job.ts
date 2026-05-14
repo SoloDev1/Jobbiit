@@ -191,7 +191,7 @@ export async function createJob(userId: string, data: CreateJobInput): Promise<J
       salaryMin:   data.salaryMin ?? null,
       salaryMax:   data.salaryMax ?? null,
       currency:    data.currency  ?? 'USD',
-      // no salary blob
+      // no salary 
     },
     include: {
       poster: posterInclude,
