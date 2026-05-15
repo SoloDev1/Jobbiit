@@ -45,6 +45,24 @@ const schema = z.object({
    * If empty, the reset email includes the raw token for in-app entry (mobile).
    */
   PASSWORD_RESET_URL_BASE: z.string().optional().default(''),
+
+
+  // ─── OAuth ────────────────────────────────────────────────────────────────
+  /**
+   * Google OAuth — Web client ID is used by the backend to verify ID tokens.
+   * iOS and Android client IDs are accepted as additional valid audiences.
+   * All three come from Google Cloud Console → APIs & Services → Credentials.
+   */
+  GOOGLE_WEB_CLIENT_ID:     z.string().min(1),
+  GOOGLE_IOS_CLIENT_ID:     z.string().min(1),
+  GOOGLE_ANDROID_CLIENT_ID: z.string().min(1),
+
+  /**
+   * Apple Sign-In — must match your iOS app's bundle ID exactly.
+   * Example: `com.yourcompany.yourapp`
+   * No secret needed for native iOS token verification (public key fetch is automatic).
+   */
+  APPLE_CLIENT_ID: z.string().min(1),
 })
 
 const parsed = schema.safeParse(process.env)

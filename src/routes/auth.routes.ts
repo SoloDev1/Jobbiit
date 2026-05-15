@@ -10,6 +10,7 @@ import {
   forgotPasswordSchema,
   resetPasswordSchema,
   deleteAccountSchema,
+  oauthSigninSchema
 } from '../schemas/auth.schema'
 import * as AuthController from '../controllers/auth.controller'
 
@@ -35,5 +36,10 @@ router.get('/me', authenticate, AuthController.me)
 router.post('/onboarding/complete', authenticate, AuthController.completeOnboarding)
 router.get('/account/data-export', authenticate, AuthController.exportAccountData)
 router.post('/account/delete', authenticate, validate(deleteAccountSchema), AuthController.deleteAccount)
+
+// OAuth
+
+router.post('/oauth/signin', strictAuthLimiter, validate(oauthSigninSchema), AuthController.oauthSignin)
+
 
 export default router

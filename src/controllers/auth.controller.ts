@@ -1,19 +1,18 @@
 import type { Request, Response } from 'express'
 import type { Role } from '@prisma/client'
-import { logger }      from '../config/logger'
+import { logger }        from '../config/logger'
 import { sendSuccess, sendCreated, sendError } from '../utils/apiResponse'
-import { prisma }      from '../config/db'
-import { env }         from '../config/env'
-import * as UserModel  from '../models/User'
+import { prisma }        from '../config/db'
+import { env }           from '../config/env'
+import * as UserModel    from '../models/User'
 import * as ProfileModel from '../models/Profile'
 import * as PasswordResetTokenModel from '../models/PasswordResetToken'
-import * as TokenModel from '../models/RefreshToken'
+import * as TokenModel   from '../models/RefreshToken'
 import * as AccountService from '../services/account.service'
 import { hashPassword, verifyPassword, DUMMY_HASH } from '../services/password.service'
 import * as EmailService from '../services/email.service'
 import {
   signAccess,
-  signRefresh,
   storeRefresh,
   rotateRefresh,
   validateStoredRefresh,
@@ -24,21 +23,23 @@ import type {
   ResetPasswordInput,
   DeleteAccountInput,
 } from '../schemas/auth.schema'
+import * as OAuthService      from '../services/oauth.service'
+import * as OAuthAccountModel from '../models/OAuthAccount'
 
+// ─── shared helper ────────────────────────────────────────────────────────────
+
+// email is string | null because OAuth users (Apple without email) may have none.
 function userAuthPayload(u: {
-  id: string
-  email: string
-  role: Role
+  id:                    string
+  email:                 string | null
+  role:                  Role
   onboardingCompletedAt: Date | null
 }) {
   return {
-    id:                   u.id,
-    email:                u.email,
-    role:                 u.role,
-    onboardingComplete: u.onboardingCompletedAt !== null,
-    ...(u.onboardingCompletedAt !== null && {
-      onboardingCompletedAt: u.onboardingCompletedAt.toISOString(),
-    }),
+    id:                    u.id,
+    email:                 u.email ?? null,
+    role:                  u.role,
+    onboardingCompletedAt: u.onboardingCompletedAt?.toISOString() ?? null,
   }
 }
 
@@ -47,8 +48,7 @@ function userAuthPayload(u: {
 export async function signup(req: Request, res: Response): Promise<void> {
   const { email, password } = req.body as { email: string; password: string }
 
-  // Check uniqueness before hashing to fail fast.
-  // Use a generic message — do not reveal whether the email is registered.
+  // Fail fast before hashing — but keep message generic.
   const existing = await UserModel.findByEmail(email)
   if (existing) {
     sendError(res, 'Email already registered', 409)
@@ -61,23 +61,21 @@ export async function signup(req: Request, res: Response): Promise<void> {
     const createdUser = await tx.user.create({
       data: { email, passwordHash },
       select: {
-        id:                     true,
-        email:                  true,
-        role:                   true,
-        onboardingCompletedAt:  true,
+        id:                    true,
+        email:                 true,
+        role:                  true,
+        onboardingCompletedAt: true,
       },
     })
-
     await tx.profile.create({
       data: {
-        userId: createdUser.id,
+        userId:    createdUser.id,
         firstName: 'New',
-        lastName: 'User',
-        headline: 'New member',
+        lastName:  'User',
+        headline:  'New member',
       },
       select: { id: true },
     })
-
     return createdUser
   })
 
@@ -87,14 +85,17 @@ export async function signup(req: Request, res: Response): Promise<void> {
   logger.info({ userId: user.id }, 'User signed up')
 
   sendCreated(res, {
-    user:        userAuthPayload(user),
+    user: userAuthPayload(user),
     accessToken,
     refreshToken,
   }, 'Account created successfully')
 
-  void EmailService.sendWelcomeEmail(user.email).catch((err: unknown) => {
-    logger.error({ err, userId: user.id }, 'Welcome email failed')
-  })
+  // email is always present for password signup
+  if (user.email) {
+    void EmailService.sendWelcomeEmail(user.email).catch((err: unknown) => {
+      logger.error({ err, userId: user.id }, 'Welcome email failed')
+    })
+  }
 }
 
 // ─── login ────────────────────────────────────────────────────────────────────
@@ -106,17 +107,15 @@ export async function login(req: Request, res: Response): Promise<void> {
 
   const user = await UserModel.findByEmailWithPassword(email)
 
-  // ALWAYS call verifyPassword — even when user is null — using DUMMY_HASH.
-  // This keeps response time constant so an attacker cannot distinguish
-  // "email not found" from "wrong password" via timing.
+  // Always call verifyPassword — even when user is null — to keep response
+  // time constant and prevent email enumeration via timing.
   const passwordValid = await verifyPassword(
     password,
     user?.passwordHash ?? DUMMY_HASH,
   )
 
-  // Do not reveal whether the failure was email or password.
-  // Do not reveal whether the account is banned/inactive.
-  if (!user || !passwordValid || !user.isActive) {
+  // Block: not found, wrong password, inactive, OR OAuth-only (no passwordHash).
+  if (!user || !user.passwordHash || !passwordValid || !user.isActive) {
     sendError(res, INVALID_CREDENTIALS, 401)
     return
   }
@@ -127,7 +126,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   logger.info({ userId: user.id }, 'User logged in')
 
   sendSuccess(res, {
-    user:        userAuthPayload(user),
+    user: userAuthPayload(user),
     accessToken,
     refreshToken,
   }, 'Logged in successfully')
@@ -138,7 +137,7 @@ export async function login(req: Request, res: Response): Promise<void> {
 export async function refresh(req: Request, res: Response): Promise<void> {
   const { refreshToken } = req.body as { refreshToken: string }
 
-  // 1. Cryptographically verify the JWT is well-formed and not expired.
+  // 1. Verify JWT structure and expiry.
   let payload
   try {
     payload = verifyRefresh(refreshToken)
@@ -147,32 +146,24 @@ export async function refresh(req: Request, res: Response): Promise<void> {
     return
   }
 
-  // 2. Check the token exists in the DB (not rotated or revoked).
+  // 2. Confirm the token still exists in DB (not rotated / revoked).
   const stored = await validateStoredRefresh(refreshToken)
-
   if (!stored) {
-    // Token is not in DB — either already rotated or never stored.
-    // This is the reuse detection signal: nuke every session for this user
-    // to contain the damage if the old token was stolen.
+    // Reuse detected — nuke all sessions for this user.
     await TokenModel.deleteAllForUser(payload.sub)
-    logger.warn(
-      { userId: payload.sub },
-      'Refresh token reuse detected — all sessions invalidated',
-    )
+    logger.warn({ userId: payload.sub }, 'Refresh token reuse detected — all sessions invalidated')
     sendError(res, 'Session invalidated due to suspicious activity', 401)
     return
   }
 
-  // 3. Re-fetch the user to get the current role.
-  //    Never trust the role embedded in the old token — it may be stale
-  //    (e.g. the user was promoted or banned since the token was issued).
+  // 3. Re-fetch user so we always use the current role (never trust the token).
   const user = await UserModel.findById(stored.userId)
   if (!user || !user.isActive) {
     sendError(res, 'Invalid refresh token', 401)
     return
   }
 
-  // 4. Rotate: delete old token, issue new one.
+  // 4. Rotate.
   const newRefreshToken = await rotateRefresh(refreshToken, user.id)
   const newAccessToken  = signAccess(user.id, user.role)
 
@@ -190,7 +181,6 @@ export async function me(req: Request, res: Response): Promise<void> {
     sendError(res, 'Unauthorized', 401)
     return
   }
-
   sendSuccess(res, { user: userAuthPayload(user) }, 'OK')
 }
 
@@ -216,14 +206,10 @@ export async function completeOnboarding(req: Request, res: Response): Promise<v
     return
   }
 
-  sendSuccess(
-    res,
-    {
-      onboardingComplete:      true,
-      onboardingCompletedAt:   at.toISOString(),
-    },
-    'Onboarding completed successfully',
-  )
+  sendSuccess(res, {
+    onboardingComplete:    true,
+    onboardingCompletedAt: at.toISOString(),
+  }, 'Onboarding completed successfully')
 }
 
 // ─── forgotPassword ───────────────────────────────────────────────────────────
@@ -235,15 +221,18 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
   const { email } = req.body as ForgotPasswordInput
 
   const user = await UserModel.findByEmailWithPassword(email)
+
+  // Always burn time to prevent timing attacks.
   await verifyPassword('ResetTimingNeutral1!', user?.passwordHash ?? DUMMY_HASH)
 
-  if (!user || !user.isActive) {
+  // Also bail if it's an OAuth-only account (no email / no password).
+  if (!user || !user.isActive || !user.email) {
     sendSuccess(res, null, FORGOT_PASSWORD_MESSAGE)
     return
   }
 
   const { raw } = await PasswordResetTokenModel.createForUser(user.id)
-  const base = env.PASSWORD_RESET_URL_BASE.trim()
+  const base     = env.PASSWORD_RESET_URL_BASE.trim()
   const resetLink = base
     ? `${base.replace(/\/$/, '')}?token=${encodeURIComponent(raw)}`
     : null
@@ -258,7 +247,7 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
   sendSuccess(res, null, FORGOT_PASSWORD_MESSAGE)
 }
 
-// ─── resetPassword ───────────────────────────────────────────────────────────
+// ─── resetPassword ────────────────────────────────────────────────────────────
 
 export async function resetPassword(req: Request, res: Response): Promise<void> {
   const { token, password } = req.body as ResetPasswordInput
@@ -278,7 +267,7 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
   sendSuccess(res, null, 'Password updated successfully. Please sign in again.')
 }
 
-// ─── deleteAccount ───────────────────────────────────────────────────────────
+// ─── deleteAccount ────────────────────────────────────────────────────────────
 
 export async function deleteAccount(req: Request, res: Response): Promise<void> {
   const { password } = req.body as DeleteAccountInput
@@ -287,6 +276,17 @@ export async function deleteAccount(req: Request, res: Response): Promise<void> 
   const user = await UserModel.findByIdWithPassword(id)
   if (!user || !user.isActive) {
     sendError(res, 'Unauthorized', 401)
+    return
+  }
+
+  // OAuth-only users have no passwordHash — they cannot delete via this endpoint.
+  if (!user.passwordHash) {
+    sendError(
+      res,
+      'OAuth-only accounts must use account settings to delete.',
+      400,
+      'NO_PASSWORD_ACCOUNT',
+    )
     return
   }
 
@@ -299,26 +299,25 @@ export async function deleteAccount(req: Request, res: Response): Promise<void> 
   await TokenModel.deleteAllForUser(id)
   await UserModel.deleteUser(id)
 
-  logger.info({ userId: id }, 'User account deleted (data export / store compliance)')
+  logger.info({ userId: id }, 'User account deleted')
 
   sendSuccess(res, null, 'Account deleted successfully')
 }
 
-// ─── exportAccountData ───────────────────────────────────────────────────────
+// ─── exportAccountData ────────────────────────────────────────────────────────
 
 export async function exportAccountData(req: Request, res: Response): Promise<void> {
-  const id = req.user!.id
+  const id      = req.user!.id
   const account = await AccountService.buildAccountDataExport(id)
   if (!account) {
     sendError(res, 'User not found', 404, 'NOT_FOUND')
     return
   }
 
-  sendSuccess(
-    res,
-    { exportedAt: new Date().toISOString(), account },
-    'Personal data export',
-  )
+  sendSuccess(res, {
+    exportedAt: new Date().toISOString(),
+    account,
+  }, 'Personal data export')
 }
 
 // ─── logout ───────────────────────────────────────────────────────────────────
@@ -326,9 +325,7 @@ export async function exportAccountData(req: Request, res: Response): Promise<vo
 export async function logout(req: Request, res: Response): Promise<void> {
   const { refreshToken } = req.body as { refreshToken: string }
 
-  // Verify the JWT — but if it's already expired/invalid we still succeed.
-  // Logout must be idempotent: a client with a bad token should still be
-  // able to clear their session.
+  // Logout is idempotent — an already-expired token should still succeed.
   try {
     verifyRefresh(refreshToken)
   } catch {
@@ -336,8 +333,147 @@ export async function logout(req: Request, res: Response): Promise<void> {
     return
   }
 
-  // Silently ignore if the token was already deleted.
   await TokenModel.deleteToken(refreshToken)
-
   sendSuccess(res, null, 'Logged out successfully')
+}
+
+// ─── oauthSignin ─────────────────────────────────────────────────────────────
+//
+// Flow:
+//   1. Verify the provider token (Google / Apple).
+//   2. If the OAuth account is already linked → sign in.
+//   3. If not linked but email matches an existing user → link + sign in.
+//   4. Otherwise → create user + profile, link, sign in.
+
+export async function oauthSignin(req: Request, res: Response): Promise<void> {
+  const { provider, idToken } = req.body as { provider: 'google' | 'apple'; idToken: string }
+
+  // 1. Verify with provider.
+  let identity: OAuthService.OAuthIdentity
+  try {
+    identity = provider === 'google'
+      ? await OAuthService.verifyGoogleToken(idToken)
+      : await OAuthService.verifyAppleToken(idToken)
+  } catch {
+    sendError(res, 'Invalid OAuth token', 401, 'INVALID_OAUTH_TOKEN')
+    return
+  }
+
+  // 2. Known OAuth account → sign in.
+  const existing = await OAuthAccountModel.findByProviderSubject(
+    identity.provider,
+    identity.subject,
+  )
+
+  if (existing) {
+    const user = existing.user
+    if (!user.isActive || user.isBanned) {
+      sendError(res, 'Account is not active', 403)
+      return
+    }
+
+    const accessToken  = signAccess(user.id, user.role)
+    const refreshToken = await storeRefresh(user.id)
+
+    logger.info({ userId: user.id, provider }, 'OAuth sign-in (existing)')
+    sendSuccess(res, {
+      user: userAuthPayload(user),
+      accessToken,
+      refreshToken,
+    }, 'Signed in successfully')
+    return
+  }
+
+  // 3 & 4. First time with this OAuth account.
+  let userId: string
+
+  if (identity.email) {
+    // Check whether a password account already exists for this email.
+    const existingUser = await UserModel.findByEmail(identity.email)
+
+    if (existingUser) {
+      // Link OAuth provider to the existing account (account merge).
+      userId = existingUser.id
+    } else {
+      // Brand-new user — create account without a passwordHash.
+      const newUser = await prisma.$transaction(async (tx) => {
+        const u = await tx.user.create({
+          data: { email: identity.email! },   // passwordHash intentionally omitted
+          select: {
+            id:                    true,
+            email:                 true,
+            role:                  true,
+            onboardingCompletedAt: true,
+          },
+        })
+        await tx.profile.create({
+          data: {
+            userId:    u.id,
+            firstName: 'New',
+            lastName:  'User',
+            headline:  'New member',
+          },
+          select: { id: true },
+        })
+        return u
+      })
+      userId = newUser.id
+
+      if (newUser.email) {
+        void EmailService.sendWelcomeEmail(newUser.email).catch((err: unknown) => {
+          logger.error({ err, userId: newUser.id }, 'Welcome email failed')
+        })
+      }
+    }
+  } else {
+    // Apple can omit email on subsequent sign-ins.
+    // Create a fully anonymous account; prompt for email during onboarding.
+    const newUser = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.create({
+        data: {},   // email and passwordHash both optional in schema — safely omitted
+        select: {
+          id:                    true,
+          email:                 true,
+          role:                  true,
+          onboardingCompletedAt: true,
+        },
+      })
+      await tx.profile.create({
+        data: {
+          userId:    u.id,
+          firstName: 'New',
+          lastName:  'User',
+          headline:  'New member',
+        },
+        select: { id: true },
+      })
+      return u
+    })
+    userId = newUser.id
+  }
+
+  // Link the OAuth account.
+  await OAuthAccountModel.linkToUser(
+    userId,
+    identity.provider,
+    identity.subject,
+    identity.email ?? null,
+  )
+
+  // Fetch full user record and issue tokens.
+  const user = await UserModel.findById(userId)
+  if (!user) {
+    sendError(res, 'Failed to create account', 500)
+    return
+  }
+
+  const accessToken  = signAccess(user.id, user.role)
+  const refreshToken = await storeRefresh(user.id)
+
+  logger.info({ userId: user.id, provider }, 'OAuth account created')
+  sendCreated(res, {
+    user: userAuthPayload(user),
+    accessToken,
+    refreshToken,
+  }, 'Account created successfully')
 }

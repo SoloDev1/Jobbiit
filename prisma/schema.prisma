@@ -169,8 +169,8 @@ enum ReportStatus {
 
 model User {
   id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
+  email        String?  @unique
+  passwordHash String?
   role         Role     @default(MEMBER)
   isVerified   Boolean  @default(false)
   isActive     Boolean  @default(true)
@@ -185,6 +185,8 @@ model User {
   jobComments         JobComment[]
   opportunityLikes    OpportunityLike[]
   opportunityComments OpportunityComment[]
+
+  oauthAccounts  OAuthAccount[]
 
   refreshTokens       RefreshToken[]
   profile             Profile?
@@ -768,4 +770,17 @@ model OpportunityComment {
 
   @@index([opportunityId])
   @@index([authorId])
+}
+
+model OAuthAccount {
+  id         String   @id @default(cuid())
+  userId     String
+  provider   String   // "google" | "apple"
+  subject    String   // the provider's user ID (sub claim)
+  email      String?
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject])
+  @@index([userId])
 }
