@@ -7,7 +7,7 @@ import * as AuditLogModel from './AuditLog'
 
 export interface PublicUser {
   id:       string
-  email:    string
+  email:    string | null
   role:     Role
   isActive: boolean
   isBanned: boolean
@@ -19,7 +19,7 @@ export interface PublicUserWithTimestamp extends PublicUser {
 }
 
 export interface UserWithPassword extends PublicUser {
-  passwordHash: string
+  passwordHash: string | null
 }
 
 export interface UserWithPasswordAndOnboarding extends UserWithPassword {
@@ -30,7 +30,7 @@ export interface UserWithPasswordAndOnboarding extends UserWithPassword {
 
 export interface AdminUserListItem {
   id:                   string
-  email:                string
+  email:                string | null
   role:                 Role
   isActive:             boolean
   isBanned:             boolean
