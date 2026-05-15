@@ -504,3 +504,58 @@ export async function adminUpdateJob(
 }
 
 
+// ─── softDeleteJob ────────────────────────────────────────────────────────────
+
+export async function softDeleteJob(
+  jobId:   string,
+  actorId: string,
+  opts:    { allowAdmin?: boolean } = {},
+): Promise<'deleted' | 'not_found' | 'forbidden' | 'already_deleted'> {
+  const job = await prisma.job.findUnique({
+    where:  { id: jobId },
+    select: { posterId: true, deletedAt: true },
+  })
+  if (!job) return 'not_found'
+  if (!opts.allowAdmin && job.posterId !== actorId) return 'forbidden'
+  if (job.deletedAt) return 'already_deleted'
+
+  await prisma.job.update({
+    where: { id: jobId },
+    data:  { deletedAt: new Date() },
+  })
+  return 'deleted'
+}
+
+// ─── restoreJob ───────────────────────────────────────────────────────────────
+
+export async function restoreJob(
+  jobId: string,
+): Promise<'restored' | 'not_found' | 'not_deleted'> {
+  const job = await prisma.job.findUnique({
+    where:  { id: jobId },
+    select: { deletedAt: true },
+  })
+  if (!job) return 'not_found'
+  if (!job.deletedAt) return 'not_deleted'
+
+  await prisma.job.update({
+    where: { id: jobId },
+    data:  { deletedAt: null },
+  })
+  return 'restored'
+}
+
+// ─── hardDeleteJob ────────────────────────────────────────────────────────────
+
+export async function hardDeleteJob(
+  jobId: string,
+): Promise<'deleted' | 'not_found'> {
+  const job = await prisma.job.findUnique({
+    where:  { id: jobId },
+    select: { id: true },
+  })
+  if (!job) return 'not_found'
+
+  await prisma.job.delete({ where: { id: jobId } })
+  return 'deleted'
+}

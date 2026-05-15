@@ -1,13 +1,13 @@
 import type { Request, Response } from 'express'
 import type { Role } from '@prisma/client'
-import { logger }        from '../config/logger'
+import { logger } from '../config/logger'
 import { sendSuccess, sendCreated, sendError } from '../utils/apiResponse'
-import { prisma }        from '../config/db'
-import { env }           from '../config/env'
-import * as UserModel    from '../models/User'
+import { prisma } from '../config/db'
+import { env } from '../config/env'
+import * as UserModel from '../models/User'
 import * as ProfileModel from '../models/Profile'
 import * as PasswordResetTokenModel from '../models/PasswordResetToken'
-import * as TokenModel   from '../models/RefreshToken'
+import * as TokenModel from '../models/RefreshToken'
 import * as AccountService from '../services/account.service'
 import { hashPassword, verifyPassword, DUMMY_HASH } from '../services/password.service'
 import * as EmailService from '../services/email.service'
@@ -23,22 +23,22 @@ import type {
   ResetPasswordInput,
   DeleteAccountInput,
 } from '../schemas/auth.schema'
-import * as OAuthService      from '../services/oauth.service'
+import * as OAuthService from '../services/oauth.service'
 import * as OAuthAccountModel from '../models/OAuthAccount'
 
 // ─── shared helper ────────────────────────────────────────────────────────────
 
 // email is string | null because OAuth users (Apple without email) may have none.
 function userAuthPayload(u: {
-  id:                    string
-  email:                 string | null
-  role:                  Role
+  id: string
+  email: string | null
+  role: Role
   onboardingCompletedAt: Date | null
 }) {
   return {
-    id:                    u.id,
-    email:                 u.email ?? null,
-    role:                  u.role,
+    id: u.id,
+    email: u.email ?? null,
+    role: u.role,
     onboardingCompletedAt: u.onboardingCompletedAt?.toISOString() ?? null,
   }
 }
@@ -61,25 +61,25 @@ export async function signup(req: Request, res: Response): Promise<void> {
     const createdUser = await tx.user.create({
       data: { email, passwordHash },
       select: {
-        id:                    true,
-        email:                 true,
-        role:                  true,
+        id: true,
+        email: true,
+        role: true,
         onboardingCompletedAt: true,
       },
     })
     await tx.profile.create({
       data: {
-        userId:    createdUser.id,
+        userId: createdUser.id,
         firstName: 'New',
-        lastName:  'User',
-        headline:  'New member',
+        lastName: 'User',
+        headline: 'New member',
       },
       select: { id: true },
     })
     return createdUser
   })
 
-  const accessToken  = signAccess(user.id, user.role)
+  const accessToken = signAccess(user.id, user.role)
   const refreshToken = await storeRefresh(user.id)
 
   logger.info({ userId: user.id }, 'User signed up')
@@ -120,7 +120,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     return
   }
 
-  const accessToken  = signAccess(user.id, user.role)
+  const accessToken = signAccess(user.id, user.role)
   const refreshToken = await storeRefresh(user.id)
 
   logger.info({ userId: user.id }, 'User logged in')
@@ -165,10 +165,10 @@ export async function refresh(req: Request, res: Response): Promise<void> {
 
   // 4. Rotate.
   const newRefreshToken = await rotateRefresh(refreshToken, user.id)
-  const newAccessToken  = signAccess(user.id, user.role)
+  const newAccessToken = signAccess(user.id, user.role)
 
   sendSuccess(res, {
-    accessToken:  newAccessToken,
+    accessToken: newAccessToken,
     refreshToken: newRefreshToken,
   }, 'Token refreshed successfully')
 }
@@ -207,7 +207,7 @@ export async function completeOnboarding(req: Request, res: Response): Promise<v
   }
 
   sendSuccess(res, {
-    onboardingComplete:    true,
+    onboardingComplete: true,
     onboardingCompletedAt: at.toISOString(),
   }, 'Onboarding completed successfully')
 }
@@ -232,7 +232,7 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
   }
 
   const { raw } = await PasswordResetTokenModel.createForUser(user.id)
-  const base     = env.PASSWORD_RESET_URL_BASE.trim()
+  const base = env.PASSWORD_RESET_URL_BASE.trim()
   const resetLink = base
     ? `${base.replace(/\/$/, '')}?token=${encodeURIComponent(raw)}`
     : null
@@ -307,7 +307,7 @@ export async function deleteAccount(req: Request, res: Response): Promise<void> 
 // ─── exportAccountData ────────────────────────────────────────────────────────
 
 export async function exportAccountData(req: Request, res: Response): Promise<void> {
-  const id      = req.user!.id
+  const id = req.user!.id
   const account = await AccountService.buildAccountDataExport(id)
   if (!account) {
     sendError(res, 'User not found', 404, 'NOT_FOUND')
@@ -372,7 +372,7 @@ export async function oauthSignin(req: Request, res: Response): Promise<void> {
       return
     }
 
-    const accessToken  = signAccess(user.id, user.role)
+    const accessToken = signAccess(user.id, user.role)
     const refreshToken = await storeRefresh(user.id)
 
     logger.info({ userId: user.id, provider }, 'OAuth sign-in (existing)')
@@ -400,18 +400,18 @@ export async function oauthSignin(req: Request, res: Response): Promise<void> {
         const u = await tx.user.create({
           data: { email: identity.email! },   // passwordHash intentionally omitted
           select: {
-            id:                    true,
-            email:                 true,
-            role:                  true,
+            id: true,
+            email: true,
+            role: true,
             onboardingCompletedAt: true,
           },
         })
         await tx.profile.create({
           data: {
-            userId:    u.id,
+            userId: u.id,
             firstName: 'New',
-            lastName:  'User',
-            headline:  'New member',
+            lastName: 'User',
+            headline: 'New member',
           },
           select: { id: true },
         })
@@ -432,18 +432,18 @@ export async function oauthSignin(req: Request, res: Response): Promise<void> {
       const u = await tx.user.create({
         data: {},   // email and passwordHash both optional in schema — safely omitted
         select: {
-          id:                    true,
-          email:                 true,
-          role:                  true,
+          id: true,
+          email: true,
+          role: true,
           onboardingCompletedAt: true,
         },
       })
       await tx.profile.create({
         data: {
-          userId:    u.id,
+          userId: u.id,
           firstName: 'New',
-          lastName:  'User',
-          headline:  'New member',
+          lastName: 'User',
+          headline: 'New member',
         },
         select: { id: true },
       })
@@ -467,7 +467,7 @@ export async function oauthSignin(req: Request, res: Response): Promise<void> {
     return
   }
 
-  const accessToken  = signAccess(user.id, user.role)
+  const accessToken = signAccess(user.id, user.role)
   const refreshToken = await storeRefresh(user.id)
 
   logger.info({ userId: user.id, provider }, 'OAuth account created')

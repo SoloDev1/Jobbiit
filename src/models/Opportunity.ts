@@ -410,3 +410,59 @@ export async function adminListOpportunities(
 
   return { opportunities: slice, nextCursor }
 }
+
+// ─── softDeleteOpportunity ────────────────────────────────────────────────────
+
+export async function softDeleteOpportunity(
+  opportunityId: string,
+  actorId:       string,
+  opts:          { allowAdmin?: boolean } = {},
+): Promise<'deleted' | 'not_found' | 'forbidden' | 'already_deleted'> {
+  const opp = await prisma.opportunity.findUnique({
+    where:  { id: opportunityId },
+    select: { posterId: true, deletedAt: true },
+  })
+  if (!opp) return 'not_found'
+  if (!opts.allowAdmin && opp.posterId !== actorId) return 'forbidden'
+  if (opp.deletedAt) return 'already_deleted'
+
+  await prisma.opportunity.update({
+    where: { id: opportunityId },
+    data:  { deletedAt: new Date() },
+  })
+  return 'deleted'
+}
+
+// ─── restoreOpportunity ───────────────────────────────────────────────────────
+
+export async function restoreOpportunity(
+  opportunityId: string,
+): Promise<'restored' | 'not_found' | 'not_deleted'> {
+  const opp = await prisma.opportunity.findUnique({
+    where:  { id: opportunityId },
+    select: { deletedAt: true },
+  })
+  if (!opp) return 'not_found'
+  if (!opp.deletedAt) return 'not_deleted'
+
+  await prisma.opportunity.update({
+    where: { id: opportunityId },
+    data:  { deletedAt: null },
+  })
+  return 'restored'
+}
+
+// ─── hardDeleteOpportunity ────────────────────────────────────────────────────
+
+export async function hardDeleteOpportunity(
+  opportunityId: string,
+): Promise<'deleted' | 'not_found'> {
+  const opp = await prisma.opportunity.findUnique({
+    where:  { id: opportunityId },
+    select: { id: true },
+  })
+  if (!opp) return 'not_found'
+
+  await prisma.opportunity.delete({ where: { id: opportunityId } })
+  return 'deleted'
+}

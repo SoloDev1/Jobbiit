@@ -59,6 +59,9 @@ router.patch(
   validate(updateJobSchema),
   AdminController.adminUpdateJob,
 )
+router.delete('/jobs/:id', authorize('ADMIN', 'SUPER_ADMIN'), AdminController.adminSoftDeleteJob)
+router.patch('/jobs/:id/restore', authorize('ADMIN', 'SUPER_ADMIN'), AdminController.adminRestoreJob)
+router.delete('/jobs/:id/hard', authorize('SUPER_ADMIN'), AdminController.adminHardDeleteJob)
 
 // Opportunities — uses dedicated admin model function (no status/deadline filter)
 router.get('/opportunities', authorize('ADMIN', 'SUPER_ADMIN', 'MODERATOR'), AdminController.adminListOpportunities)
@@ -66,5 +69,8 @@ router.post('/opportunities', authorize('ADMIN', 'SUPER_ADMIN'), validate(create
 router.patch('/opportunities/:id', authorize('ADMIN', 'SUPER_ADMIN'), validate(updateOpportunitySchema), OpportunityController.updateOpportunity)
 router.patch('/opportunities/:id/approve', authorize('ADMIN', 'SUPER_ADMIN', 'MODERATOR'), OpportunityController.approveOpportunity)
 router.patch('/opportunities/:id/reject', authorize('ADMIN', 'SUPER_ADMIN', 'MODERATOR'), validate(rejectOpportunitySchema), OpportunityController.rejectOpportunity)
+router.delete('/opportunities/:id', authorize('ADMIN', 'SUPER_ADMIN'), AdminController.adminSoftDeleteOpportunity)
+router.patch('/opportunities/:id/restore', authorize('ADMIN', 'SUPER_ADMIN'), AdminController.adminRestoreOpportunity)
+router.delete('/opportunities/:id/hard', authorize('SUPER_ADMIN'), AdminController.adminHardDeleteOpportunity)
 
 export default router

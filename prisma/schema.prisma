@@ -135,6 +135,9 @@ enum AuditAction {
   DELETE_COMMENT
   RESOLVE_REPORT
   DISMISS_REPORT
+  DELETE_JOB 
+  HARD_DELETE_JOB
+  HARD_DELETE_OPPORTUNITY
 }
 
 enum ReportType {
@@ -488,6 +491,7 @@ model Job {
   currency     String?   @default("USD")
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  deletedAt  DateTime?
 
   likes    JobLike[]
   comments JobComment[]
@@ -574,6 +578,7 @@ model Opportunity {
   salary          String?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
+  deletedAt  DateTime?
 
 
   likes    OpportunityLike[]

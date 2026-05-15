@@ -34,6 +34,8 @@ import * as JobModel from '../models/Job'
 import * as OpportunityModel from '../models/Opportunity'
 import type { UpdateJobInput } from '../schemas/job.schema'
 
+
+
 const uuidParam = z.string().uuid()
 
 function actorId(req: Request): string {
@@ -428,4 +430,106 @@ export async function adminUpdateJob(req: Request, res: Response): Promise<void>
   }
 
   sendSuccess(res, result, 'Job updated')
+}
+
+// ─── Job delete/restore ───────────────────────────────────────────────────────
+
+export async function adminSoftDeleteJob(req: Request, res: Response): Promise<void> {
+  const parsed = uuidParam.safeParse(req.params.id)
+  if (!parsed.success) {
+    sendError(res, 'Invalid job id', 400, 'INVALID_ID')
+    return
+  }
+
+  const result = await JobModel.softDeleteJob(parsed.data, actorId(req), { allowAdmin: true })
+
+  if (result === 'not_found') { sendError(res, 'Job not found', 404, 'NOT_FOUND'); return }
+  if (result === 'already_deleted') { sendError(res, 'Job already deleted', 409, 'ALREADY_DELETED'); return }
+
+  await AuditLogModel.logAction(actorId(req), 'DELETE_JOB', { entityId: parsed.data, entityType: 'Job' })
+  logger.info({ actorId: actorId(req), jobId: parsed.data }, 'Admin soft-deleted job')
+  sendNoContent(res)
+}
+
+export async function adminRestoreJob(req: Request, res: Response): Promise<void> {
+  const parsed = uuidParam.safeParse(req.params.id)
+  if (!parsed.success) {
+    sendError(res, 'Invalid job id', 400, 'INVALID_ID')
+    return
+  }
+
+  const result = await JobModel.restoreJob(parsed.data)
+
+  if (result === 'not_found') { sendError(res, 'Job not found', 404, 'NOT_FOUND'); return }
+  if (result === 'not_deleted') { sendError(res, 'Job is not deleted', 409, 'NOT_DELETED'); return }
+
+  logger.info({ actorId: actorId(req), jobId: parsed.data }, 'Admin restored job')
+  sendSuccess(res, { id: parsed.data }, 'Job restored')
+}
+
+export async function adminHardDeleteJob(req: Request, res: Response): Promise<void> {
+  const parsed = uuidParam.safeParse(req.params.id)
+  if (!parsed.success) {
+    sendError(res, 'Invalid job id', 400, 'INVALID_ID')
+    return
+  }
+
+  const result = await JobModel.hardDeleteJob(parsed.data)
+
+  if (result === 'not_found') { sendError(res, 'Job not found', 404, 'NOT_FOUND'); return }
+
+  await AuditLogModel.logAction(actorId(req), 'HARD_DELETE_JOB', { entityId: parsed.data, entityType: 'Job' })
+  logger.info({ actorId: actorId(req), jobId: parsed.data }, 'Admin hard-deleted job')
+  sendNoContent(res)
+}
+
+// ─── Opportunity delete/restore ───────────────────────────────────────────────
+
+export async function adminSoftDeleteOpportunity(req: Request, res: Response): Promise<void> {
+  const parsed = uuidParam.safeParse(req.params.id)
+  if (!parsed.success) {
+    sendError(res, 'Invalid opportunity id', 400, 'INVALID_ID')
+    return
+  }
+
+  const result = await OpportunityModel.softDeleteOpportunity(parsed.data, actorId(req), { allowAdmin: true })
+
+  if (result === 'not_found') { sendError(res, 'Opportunity not found', 404, 'NOT_FOUND'); return }
+  if (result === 'already_deleted') { sendError(res, 'Opportunity already deleted', 409, 'ALREADY_DELETED'); return }
+
+  await AuditLogModel.logAction(actorId(req), 'DELETE_OPPORTUNITY', { entityId: parsed.data, entityType: 'Opportunity' })
+  logger.info({ actorId: actorId(req), opportunityId: parsed.data }, 'Admin soft-deleted opportunity')
+  sendNoContent(res)
+}
+
+export async function adminRestoreOpportunity(req: Request, res: Response): Promise<void> {
+  const parsed = uuidParam.safeParse(req.params.id)
+  if (!parsed.success) {
+    sendError(res, 'Invalid opportunity id', 400, 'INVALID_ID')
+    return
+  }
+
+  const result = await OpportunityModel.restoreOpportunity(parsed.data)
+
+  if (result === 'not_found') { sendError(res, 'Opportunity not found', 404, 'NOT_FOUND'); return }
+  if (result === 'not_deleted') { sendError(res, 'Opportunity is not deleted', 409, 'NOT_DELETED'); return }
+
+  logger.info({ actorId: actorId(req), opportunityId: parsed.data }, 'Admin restored opportunity')
+  sendSuccess(res, { id: parsed.data }, 'Opportunity restored')
+}
+
+export async function adminHardDeleteOpportunity(req: Request, res: Response): Promise<void> {
+  const parsed = uuidParam.safeParse(req.params.id)
+  if (!parsed.success) {
+    sendError(res, 'Invalid opportunity id', 400, 'INVALID_ID')
+    return
+  }
+
+  const result = await OpportunityModel.hardDeleteOpportunity(parsed.data)
+
+  if (result === 'not_found') { sendError(res, 'Opportunity not found', 404, 'NOT_FOUND'); return }
+
+  await AuditLogModel.logAction(actorId(req), 'HARD_DELETE_OPPORTUNITY', { entityId: parsed.data, entityType: 'Opportunity' })
+  logger.info({ actorId: actorId(req), opportunityId: parsed.data }, 'Admin hard-deleted opportunity')
+  sendNoContent(res)
 }
