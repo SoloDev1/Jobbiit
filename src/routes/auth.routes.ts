@@ -40,6 +40,7 @@ router.post('/account/delete', authenticate, validate(deleteAccountSchema), Auth
 // OAuth
 
 router.post('/oauth/signin', strictAuthLimiter, validate(oauthSigninSchema), AuthController.oauthSignin)
+router.post('/account/delete/oauth', authenticate, AuthController.deleteOAuthAccount)
 
 
 export default router

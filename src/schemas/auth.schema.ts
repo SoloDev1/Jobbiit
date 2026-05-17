@@ -65,10 +65,13 @@ export const deleteAccountSchema = z
   })
   .strict()
 
-  export const oauthSigninSchema = z.object({
-  provider: z.enum(['google', 'apple']),
-  idToken:  z.string().min(1),
+export const oauthSigninSchema = z.object({
+  provider:  z.enum(['google', 'apple']),
+  idToken:   z.string().min(1),
+  firstName: z.string().trim().max(50).optional(),
+  lastName:  z.string().trim().max(50).optional(),
 }).strict()
+
 
 export type SignupInput  = z.infer<typeof signupSchema>
 export type LoginInput   = z.infer<typeof loginSchema>
