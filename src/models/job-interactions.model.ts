@@ -105,7 +105,6 @@ export async function getJobComments(
   const rows = await prisma.jobComment.findMany({
     where: {
       jobId,
-      isDeleted: false,
       ...(cursorId ? { id: { lt: cursorId } } : {}),
     },
     orderBy: { createdAt: 'asc' },
@@ -138,9 +137,8 @@ export async function deleteJobComment(
   const isOwner = comment.authorId === userId
   if (!isOwner && !opts.allowAdmin) return 'forbidden'
 
-  await prisma.jobComment.update({
-    where: { id: commentId },
-    data:  { isDeleted: true, deletedById: userId },
-  })
+  await prisma.jobComment.delete({
+  where: { id: commentId },
+})
   return 'deleted'
 }

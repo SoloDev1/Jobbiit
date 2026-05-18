@@ -107,7 +107,6 @@ export async function getOpportunityComments(
   const rows = await prisma.opportunityComment.findMany({
     where: {
       opportunityId,
-      isDeleted: false,
       ...(cursorId ? { id: { lt: cursorId } } : {}),
     },
     orderBy: { createdAt: 'asc' },
