@@ -128,16 +128,18 @@ export async function deleteExperience(req: Request, res: Response): Promise<voi
 // ─── addEducation ─────────────────────────────────────────────────────────────
 
 export async function addEducation(req: Request, res: Response): Promise<void> {
-  const data = req.body as AddEducationInput
+  try {
+    const profileId = await ProfileModel.getProfileIdByUserId(userId(req))
+    if (!profileId) {
+      sendError(res, 'Profile not found', 404, 'NOT_FOUND')
+      return
+    }
 
-  const profileId = await ProfileModel.getProfileIdByUserId(userId(req))
-  if (!profileId) {
-    sendError(res, 'Profile not found', 404, 'NOT_FOUND')
-    return
+    const created = await ProfileModel.addEducation(profileId, req.body as AddEducationInput)
+    sendCreated(res, created, 'Education added')
+  } catch (err) {
+    sendError(res, 'Failed to add education', 500, 'INTERNAL_ERROR')
   }
-
-  const created = await ProfileModel.addEducation(profileId, data)
-  sendCreated(res, created, 'Education added')
 }
 
 // ─── deleteEducation ───────────────────────────────────────────────────────────

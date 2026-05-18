@@ -399,7 +399,7 @@ export async function adminListOpportunities(
           profile: { select: { firstName: true, lastName: true, avatarUrl: true } },
         },
       },
-      _count: { select: { applications: true } },
+      _count: { select: { applications: true, comments: true} },
     },
   })
 

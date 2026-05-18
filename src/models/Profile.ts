@@ -131,26 +131,37 @@ export async function deleteExperience(id: string, profileId: string): Promise<b
 export async function addEducation(
   profileId: string,
   data: AddEducationInput,
-): Promise<{ id: string }> {
+) {
   const startDate = new Date(Date.UTC(data.startYear, 0, 1))
   const endDate =
     data.endYear !== undefined ? new Date(Date.UTC(data.endYear, 11, 31)) : null
-
+ 
+  // Return the full row, not just { id }
   const row = await prisma.education.create({
     data: {
       profileId,
       school:      data.school,
-      degree:      data.degree,
-      field:       data.field,
+      degree:      data.degree ?? null,
+      field:       data.field ?? null,
       startDate,
       endDate,
       description: null,
     },
-    select: { id: true },
+    // select every field the client's Education type expects
+    select: {
+      id:          true,
+      profileId:   true,
+      school:      true,
+      degree:      true,
+      field:       true,
+      startDate:   true,
+      endDate:     true,
+      description: true,
+      createdAt:   true,
+    },
   })
   return row
 }
-
 export async function deleteEducation(id: string, profileId: string): Promise<boolean> {
   const result = await prisma.education.deleteMany({
     where: { id, profileId },

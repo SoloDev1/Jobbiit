@@ -37,17 +37,18 @@ export const addExperienceSchema = z
 
 export const addEducationSchema = z
   .object({
-    school: z.string().trim().min(1),
-    degree:      z.string().trim().min(1),
-    field:       z.string().trim().min(1),
+    school:      z.string().min(1),
+    degree:      z.string().min(1).optional(),
+    field:       z.string().min(1).optional(),
     startYear:   z.number().int().min(1900).max(2100),
     endYear:     z.number().int().min(1900).max(2100).optional(),
+    description: z.string().optional(),
   })
   .strict()
   .refine(
     (d) => d.endYear === undefined || d.endYear >= d.startYear,
-    { message: 'endYear must be >= startYear', path: ['endYear'] },
-  )
+    { message: "endYear must be >= startYear", path: ["endYear"] },
+  );
 
 export const addSkillsSchema = z
   .object({
