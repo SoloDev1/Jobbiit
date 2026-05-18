@@ -138,7 +138,7 @@ export async function deleteJobComment(
   const isOwner = comment.authorId === userId
   if (!isOwner && !opts.allowAdmin) return 'forbidden'
 
-  await prisma.jobComment.update({
+  await prisma.jobComment.delete({
     where: { id: commentId },
     data:  { isDeleted: true, deletedById: userId },
   })
