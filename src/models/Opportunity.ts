@@ -71,26 +71,31 @@ export function decodeCursor(cursor: string): { createdAt: Date; id: string } | 
   }
 }
 
-function mapRow<
-  T extends {
+// AFTER
+function mapRow <T extends {
     savedBy:      { userId: string }[]
     applications: { userId: string }[]
+    likes:        { userId: string }[]
   } & Record<string, unknown>,
->(row: T, viewerId: string): Omit<T, 'savedBy' | 'applications'> & { isSavedByUser: boolean; isAppliedByUser: boolean } {
-  const { savedBy, applications, ...rest } = row
+>(row: T, viewerId: string): Omit<T, 'savedBy' | 'applications' | 'likes'> & { isSavedByUser: boolean; isAppliedByUser: boolean; likeCount: number; isLikedByUser: boolean } {
+  const { savedBy, applications, likes, ...rest } = row
   return {
     ...rest,
     isSavedByUser:   savedBy.length > 0,
     isAppliedByUser: applications.length > 0,
-  } as Omit<T, 'savedBy' | 'applications'> & { isSavedByUser: boolean; isAppliedByUser: boolean }
+    likeCount:       (rest._count as any)?.likes ?? 0,
+    isLikedByUser:   likes.length > 0,
+  } as any
 }
 
+// AFTER
 function viewerIncludes(viewerId: string) {
   return {
     poster:       posterSelect,
     savedBy:      { where: { userId: viewerId }, take: 1 },
     applications: { where: { userId: viewerId }, take: 1, select: { userId: true } },
-    _count:       { select: { applications: true } },
+    likes:        { where: { userId: viewerId }, take: 1, select: { userId: true } },
+    _count:       { select: { applications: true, comments: true, likes: true } },
   } as const
 }
 

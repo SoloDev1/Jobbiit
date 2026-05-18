@@ -41,3 +41,16 @@ export const sessionLimiter = rateLimit({
   legacyHeaders: false,
   message: rateLimitResponse('Session busy. Please wait.'),
 })
+
+export const likeActionLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  limit: 60, // ~1/sec, normal scroll behavior
+  message: rateLimitResponse('Slow down on the likes!'),
+})
+
+export const postCreationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 10,
+  message: rateLimitResponse('Post limit reached. Try again in an hour.'),
+})
+

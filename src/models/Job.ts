@@ -104,12 +104,19 @@ export function decodeCursor(cursor: string): { createdAt: Date; id: string } | 
   }
 }
 
-function mapJob<T extends { salary: string | null; savedBy: { userId: string }[] } & Record<string, unknown>>(
+// AFTER
+function mapJob<T extends { salary: string | null; savedBy: { userId: string }[]; likes: { userId: string }[] } & Record<string, unknown>>(
   row: T,
   viewerId: string,
-): Omit<T, 'salary' | 'savedBy'> & { salary: SalaryInfo | null; isSavedByUser: boolean } {
-  const { salary, savedBy, ...rest } = row
-  return { ...rest, salary: parseSalary(salary as string | null), isSavedByUser: savedBy.length > 0 } as Omit<T, 'salary' | 'savedBy'> & { salary: SalaryInfo | null; isSavedByUser: boolean }
+): Omit<T, 'salary' | 'savedBy' | 'likes'> & { salary: SalaryInfo | null; isSavedByUser: boolean; likeCount: number; isLikedByUser: boolean } {
+  const { salary, savedBy, likes, ...rest } = row
+  return {
+    ...rest,
+    salary:        parseSalary(salary as string | null),
+    isSavedByUser: savedBy.length > 0,
+    likeCount:     (rest._count as any)?.likes ?? 0,
+    isLikedByUser: likes.length > 0,
+  } as any
 }
 
 // ─── getJobs ──────────────────────────────────────────────────────────────────
@@ -159,11 +166,12 @@ export async function getJobs(
     where,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take,
-    include: {
-      poster: posterInclude,
-      savedBy: { where: { userId: viewerId }, take: 1 },
-      _count:  { select: { applications: true } },
-    },
+   include: {
+  poster:  posterInclude,
+  savedBy: { where: { userId: viewerId }, take: 1 },
+  likes:   { where: { userId: viewerId }, take: 1, select: { userId: true } },
+  _count:  { select: { applications: true, comments: true, likes: true } },
+},
   })
 
   const hasMore = rows.length > take - 1
@@ -196,8 +204,9 @@ export async function createJob(userId: string, data: CreateJobInput): Promise<J
     include: {
       poster: posterInclude,
       savedBy: { where: { userId }, take: 1 },
-      _count:  { select: { applications: true } },
-    },
+      likes:   { where: { userId: userId }, take: 1, select: { userId: true } },
+_count:  { select: { applications: true, comments: true, likes: true } },
+    },      
   })
   return mapJob(row as unknown as Parameters<typeof mapJob>[0], userId) as unknown as JobDetail
 }
@@ -210,7 +219,8 @@ export async function getJobById(jobId: string, viewerId: string): Promise<JobDe
     include: {
       poster: posterInclude,
       savedBy: { where: { userId: viewerId }, take: 1 },
-      _count:  { select: { applications: true } },
+      likes:   { where: { userId: viewerId }, take: 1, select: { userId: true } },
+_count:  { select: { applications: true, comments: true, likes: true } },
     },
   })
   if (!row) return null
@@ -248,12 +258,13 @@ export async function updateJob(
     include: {
       poster: posterInclude,
       savedBy: { where: { userId }, take: 1 },
-      _count:  { select: { applications: true } },
+      likes:   { where: { userId }, take: 1, select: { userId: true } },
+      _count:  { select: { applications: true, comments: true, likes: true } },
     },
   })
 
-  const { salary: _raw, savedBy: _savedBy, ...rest } = row as any
-  return { ...rest, isSavedByUser: _savedBy.length > 0 } as unknown as JobDetail
+  const { salary: _raw, savedBy: _savedBy, likes: _likes, ...rest } = row as any
+  return { ...rest, isSavedByUser: _savedBy.length > 0, isLikedByUser: _likes.length > 0 } as unknown as JobDetail
 }
 // ─── closeJob ─────────────────────────────────────────────────────────────────
 
