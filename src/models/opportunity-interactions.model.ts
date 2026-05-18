@@ -141,8 +141,7 @@ export async function deleteOpportunityComment(
   if (!isOwner && !opts.allowAdmin) return 'forbidden'
 
   await prisma.opportunityComment.delete({
-    where: { id: commentId },
-    data:  { isDeleted: true, deletedById: userId },
-  })
+  where: { id: commentId },
+})
   return 'deleted'
 }
