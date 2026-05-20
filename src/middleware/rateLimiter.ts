@@ -1,4 +1,5 @@
 // middleware/rateLimiter.ts
+import type { Request } from 'express'
 import rateLimit from 'express-rate-limit'
 import { env } from '../config/env'
 
@@ -23,6 +24,24 @@ export const strictAuthLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: rateLimitResponse('Too many attempts. Please try again in 15 minutes.'),
+})
+
+/** OTP forgot-password: max 3 requests per 15 minutes per IP + email. */
+export const forgotPasswordOtpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 3,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => {
+    const email =
+      typeof req.body?.email === 'string'
+        ? req.body.email.trim().toLowerCase()
+        : 'unknown'
+    return `${req.ip}:${email}`
+  },
+  message: rateLimitResponse(
+    'Too many reset requests. Please try again in 15 minutes.',
+  ),
 })
 
 

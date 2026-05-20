@@ -181,6 +181,8 @@ model User {
   banReason               String?
   pushToken               String?
   onboardingCompletedAt DateTime?
+  otp                   String?
+  otpExpiresAt          DateTime? @map("otp_expires_at")
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 

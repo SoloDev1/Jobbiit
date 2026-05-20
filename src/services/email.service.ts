@@ -85,6 +85,27 @@ export async function sendPasswordResetEmail(
   })
 }
 
+export async function sendPasswordOtpEmail(to: string, otp: string): Promise<void> {
+  await sendEmail({
+    to,
+    subject: 'Your OpporLink password reset code',
+    html: `
+      <p>We received a request to reset your OpporLink password.</p>
+      <p style="font-size:28px;font-weight:700;letter-spacing:6px;font-family:monospace">${otp}</p>
+      <p>This code expires in 10 minutes. If you did not request this, you can ignore this email.</p>
+    `.trim(),
+    text: [
+      'We received a request to reset your OpporLink password.',
+      '',
+      `Your reset code: ${otp}`,
+      '',
+      'This code expires in 10 minutes.',
+      '',
+      'If you did not request this, you can ignore this email.',
+    ].join('\n'),
+  })
+}
+
 export async function sendWelcomeEmail(to: string): Promise<void> {
   await sendEmail({
     to,

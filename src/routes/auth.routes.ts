@@ -1,6 +1,10 @@
 // routes/auth.routes.ts
 import { Router } from 'express'
-import { strictAuthLimiter, sessionLimiter } from '../middleware/rateLimiter'
+import {
+  strictAuthLimiter,
+  sessionLimiter,
+  forgotPasswordOtpLimiter,
+} from '../middleware/rateLimiter'
 import { authenticate } from '../middleware/authenticate'
 import { validate } from '../middleware/validate'
 import {
@@ -8,6 +12,8 @@ import {
   loginSchema,
   refreshSchema,
   forgotPasswordSchema,
+  forgotPasswordOtpSchema,
+  verifyOtpSchema,
   resetPasswordSchema,
   deleteAccountSchema,
   oauthSigninSchema
@@ -23,6 +29,9 @@ router.post('/login',  strictAuthLimiter, validate(loginSchema),  AuthController
 
 router.post('/password/forgot', strictAuthLimiter, validate(forgotPasswordSchema), AuthController.forgotPassword)
 router.post('/password/reset',  strictAuthLimiter, validate(resetPasswordSchema),  AuthController.resetPassword)
+
+router.post('/forgot-password', forgotPasswordOtpLimiter, validate(forgotPasswordOtpSchema), AuthController.forgotPasswordOtp)
+router.post('/verify-otp', strictAuthLimiter, validate(verifyOtpSchema), AuthController.verifyOtp)
 
 // ─── SESSION ENDPOINTS ────────────────────────────────────────────────────
 // Uses session limiter (higher limit) so background refreshes don't lock the user out

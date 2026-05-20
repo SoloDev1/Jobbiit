@@ -176,6 +176,48 @@ export async function updatePasswordHash(userId: string, passwordHash: string): 
   })
 }
 
+export async function setPasswordOtp(
+  userId: string,
+  otpHash: string,
+  expiresAt: Date,
+): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data:  { otp: otpHash, otpExpiresAt: expiresAt },
+  })
+}
+
+export async function clearPasswordOtp(userId: string): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data:  { otp: null, otpExpiresAt: null },
+  })
+}
+
+export interface UserWithOtp extends UserWithPasswordAndOnboarding {
+  otp:          string | null
+  otpExpiresAt: Date | null
+}
+
+export async function findByEmailWithOtp(
+  email: string,
+): Promise<UserWithOtp | null> {
+  return prisma.user.findUnique({
+    where:  { email },
+    select: {
+      id:                     true,
+      email:                  true,
+      passwordHash:           true,
+      role:                   true,
+      isActive:               true,
+      isBanned:               true,
+      onboardingCompletedAt:  true,
+      otp:                    true,
+      otpExpiresAt:           true,
+    },
+  })
+}
+
 export async function deleteUser(userId: string): Promise<void> {
   await prisma.user.delete({ where: { id: userId } })
 }

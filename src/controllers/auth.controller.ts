@@ -21,8 +21,17 @@ import {
 import type {
   ForgotPasswordInput,
   ResetPasswordInput,
+  ForgotPasswordOtpInput,
+  VerifyOtpInput,
   DeleteAccountInput,
 } from '../schemas/auth.schema'
+import {
+  generateSixDigitOtp,
+  hashOtp,
+  otpMatches,
+  otpExpiresAt,
+  isOtpExpired,
+} from '../services/otp.service'
 import * as OAuthService from '../services/oauth.service'
 import * as OAuthAccountModel from '../models/OAuthAccount'
 
@@ -248,6 +257,59 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
   })
 
   sendSuccess(res, null, FORGOT_PASSWORD_MESSAGE)
+}
+
+// ─── forgotPasswordOtp ────────────────────────────────────────────────────────
+
+export async function forgotPasswordOtp(req: Request, res: Response): Promise<void> {
+  const { email } = req.body as ForgotPasswordOtpInput
+
+  const user = await UserModel.findByEmailWithPassword(email)
+
+  await verifyPassword('ResetTimingNeutral1!', user?.passwordHash ?? DUMMY_HASH)
+
+  if (!user || !user.isActive || !user.email) {
+    sendSuccess(res, null, FORGOT_PASSWORD_MESSAGE)
+    return
+  }
+
+  const rawOtp = generateSixDigitOtp()
+  await UserModel.setPasswordOtp(user.id, hashOtp(rawOtp), otpExpiresAt())
+
+  void EmailService.sendPasswordOtpEmail(user.email, rawOtp).catch((err: unknown) => {
+    logger.error({ err, userId: user.id }, 'Password OTP email failed')
+  })
+
+  sendSuccess(res, null, FORGOT_PASSWORD_MESSAGE)
+}
+
+// ─── verifyOtp ────────────────────────────────────────────────────────────────
+
+export async function verifyOtp(req: Request, res: Response): Promise<void> {
+  const { email, otp, new_password } = req.body as VerifyOtpInput
+
+  const user = await UserModel.findByEmailWithOtp(email)
+
+  const otpInvalid =
+    !user ||
+    !user.isActive ||
+    !user.otp ||
+    isOtpExpired(user.otpExpiresAt) ||
+    !otpMatches(user.otp, otp)
+
+  if (otpInvalid) {
+    sendError(res, 'Invalid or expired OTP', 400, 'INVALID_OTP')
+    return
+  }
+
+  const passwordHash = await hashPassword(new_password)
+  await UserModel.updatePasswordHash(user.id, passwordHash)
+  await UserModel.clearPasswordOtp(user.id)
+  await TokenModel.deleteAllForUser(user.id)
+
+  logger.info({ userId: user.id }, 'Password reset via OTP completed')
+
+  sendSuccess(res, null, 'Password updated successfully. Please sign in again.')
 }
 
 // ─── resetPassword ────────────────────────────────────────────────────────────
