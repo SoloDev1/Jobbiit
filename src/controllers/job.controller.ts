@@ -16,6 +16,7 @@ import {
   type ApplyJobInput,
 } from '../schemas/job.schema'
 import * as notificationService from '../services/notification.service'
+import { audit } from '../models/AuditLog'
 
 const uuidParam = z.string().uuid()
 
@@ -57,6 +58,13 @@ export async function createJob(req: Request, res: Response): Promise<void> {
 
   notificationService.notifyJobCreated(job.id, job.title, job.company, userId(req))
   logger.info({ userId: userId(req), jobId: job.id }, 'Job created')
+
+  await audit(req, 'JOB_CREATED', {
+    entityId:   job.id,
+    entityType: 'Job',
+    metadata:   { title: job.title, company: job.company },
+  })
+
   sendCreated(res, job, 'Job created')
 }
 
@@ -100,6 +108,13 @@ export async function updateJob(req: Request, res: Response): Promise<void> {
   }
 
   logger.info({ userId: userId(req), jobId: parsed.data }, 'Job updated')
+
+  await audit(req, 'JOB_UPDATED', {
+    entityId:   parsed.data,
+    entityType: 'Job',
+    metadata:   { fields: Object.keys(data) },
+  })
+
   sendSuccess(res, result, 'Job updated')
 }
 
@@ -124,6 +139,12 @@ export async function closeJob(req: Request, res: Response): Promise<void> {
   }
 
   logger.info({ userId: userId(req), jobId: parsed.data }, 'Job closed')
+
+  await audit(req, 'JOB_CLOSED', {
+    entityId:   parsed.data,
+    entityType: 'Job',
+  })
+
   sendNoContent(res)
 }
 

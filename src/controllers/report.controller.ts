@@ -3,6 +3,7 @@ import { logger } from '../config/logger'
 import { sendCreated, sendError, sendSuccess } from '../utils/apiResponse'
 import * as ReportModel from '../models/Report'
 import type { CreateReportInput } from '../schemas/report.schema'
+import { audit } from '../models/AuditLog'
 
 function userId(req: Request): string {
   return req.user!.id
@@ -19,6 +20,12 @@ export async function fileReport(req: Request, res: Response): Promise<void> {
   }
 
   logger.info({ reporterId: userId(req), reportId: result.id }, 'Report filed')
+
+  await audit(req, 'REPORT_CREATED', {
+    entityId:   result.id,
+    entityType: 'Report',
+    metadata:   { type: data.type, targetId: data.targetId, reason: data.reason },
+  })
 
   sendCreated(res, { id: result.id }, 'Report submitted')
 }

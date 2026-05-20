@@ -10,6 +10,7 @@ import {
 import * as OppModel from '../models/Opportunity'
 import * as OppInteractions from '../models/opportunity-interactions.model'
 import * as notificationService from '../services/notification.service'
+import { audit } from '../models/AuditLog'
 import {
   opportunitiesQuerySchema,
   type CreateOpportunityInput,
@@ -134,6 +135,12 @@ export async function createOpportunity(req: Request, res: Response): Promise<vo
   const opp = await OppModel.createOpportunity(userId(req), data)
   logger.info({ userId: userId(req), opportunityId: opp.id }, 'Opportunity created')
 
+  await audit(req, 'CREATE_OPPORTUNITY', {
+    entityId:   opp.id,
+    entityType: 'Opportunity',
+    metadata:   { title: opp.title, category: opp.category },
+  })
+
   sendCreated(res, opp, 'Opportunity created')
 }
 
@@ -153,6 +160,13 @@ export async function updateOpportunity(req: Request, res: Response): Promise<vo
   }
 
   logger.info({ userId: userId(req), opportunityId: parsed.data }, 'Opportunity updated')
+
+  await audit(req, 'UPDATE_OPPORTUNITY', {
+    entityId:   parsed.data,
+    entityType: 'Opportunity',
+    metadata:   { fields: Object.keys(data) },
+  })
+
   sendSuccess(res, result, 'Opportunity updated')
 }
 
@@ -171,6 +185,13 @@ export async function approveOpportunity(req: Request, res: Response): Promise<v
 
   notificationService.notifyOpportunityApproved(result.id, result.title, result.posterId, userId(req))
   logger.info({ userId: userId(req), opportunityId: parsed.data }, 'Opportunity approved')
+
+  await audit(req, 'APPROVE_OPPORTUNITY', {
+    entityId:   parsed.data,
+    entityType: 'Opportunity',
+    targetId:   result.posterId,
+  })
+
   sendSuccess(res, result, 'Opportunity approved and published')
 }
 
@@ -190,6 +211,13 @@ export async function rejectOpportunity(req: Request, res: Response): Promise<vo
   }
 
   logger.info({ userId: userId(req), opportunityId: parsed.data }, 'Opportunity rejected')
+
+  await audit(req, 'REJECT_OPPORTUNITY', {
+    entityId:   parsed.data,
+    entityType: 'Opportunity',
+    metadata:   { reason },
+  })
+
   sendSuccess(res, result, 'Opportunity rejected')
 }
 

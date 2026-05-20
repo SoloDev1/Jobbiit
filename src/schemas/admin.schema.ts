@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { Role, AuditAction } from '@prisma/client'
+import { Role, AuditAction, AuditLogStatus } from '@prisma/client'
 
 // ─── Push / in-app ────────────────────────────────────────────────────────────
 
@@ -81,11 +81,27 @@ export type AdminCreatePostInput = z.infer<typeof adminCreatePostSchema>
 
 // ─── Audit logs ───────────────────────────────────────────────────────────────
 
-export const adminListAuditLogsQuerySchema = z.object({
-  cursor:  z.string().optional(),
-  limit:   z.coerce.number().int().positive().max(100).default(20),
-  actorId: z.string().uuid().optional(),
-  action:  z.nativeEnum(AuditAction).optional(),
-})
+const isoDateParam = z
+  .string()
+  .datetime({ offset: true })
+  .transform((s) => new Date(s))
+
+export const adminListAuditLogsQuerySchema = z
+  .object({
+    cursor:     z.string().optional(),
+    limit:      z.coerce.number().int().positive().max(100).default(20),
+    actorId:    z.string().uuid().optional(),
+    action:     z.nativeEnum(AuditAction).optional(),
+    entityId:   z.string().uuid().optional(),
+    entityType: z.string().trim().min(1).max(50).optional(),
+    status:     z.nativeEnum(AuditLogStatus).optional(),
+    from:       isoDateParam.optional(),
+    to:         isoDateParam.optional(),
+    search:     z.string().trim().min(1).max(200).optional(),
+  })
+  .refine(
+    (v) => !(v.from && v.to) || v.from.getTime() <= v.to.getTime(),
+    { message: '`from` must be on or before `to`', path: ['from'] },
+  )
 
 export type AdminListAuditLogsQuery = z.infer<typeof adminListAuditLogsQuerySchema>

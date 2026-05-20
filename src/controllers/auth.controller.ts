@@ -34,6 +34,7 @@ import {
 } from '../services/otp.service'
 import * as OAuthService from '../services/oauth.service'
 import * as OAuthAccountModel from '../models/OAuthAccount'
+import { audit } from '../models/AuditLog'
 
 // ─── shared helper ────────────────────────────────────────────────────────────
 
@@ -62,6 +63,11 @@ export async function signup(req: Request, res: Response): Promise<void> {
   // Fail fast before hashing — but keep message generic.
   const existing = await UserModel.findByEmail(email)
   if (existing) {
+    await audit(req, 'SIGNUP', {
+      status: 'FAILURE',
+      errorMessage: 'Email already registered',
+      metadata: { email },
+    })
     sendError(res, 'Email already registered', 409)
     return
   }
@@ -96,6 +102,11 @@ export async function signup(req: Request, res: Response): Promise<void> {
 
   logger.info({ userId: user.id }, 'User signed up')
 
+  await audit(req, 'SIGNUP', {
+    actorId: user.id,
+    metadata: { email: user.email },
+  })
+
   sendCreated(res, {
     user: userAuthPayload(user),
     accessToken,
@@ -128,6 +139,21 @@ export async function login(req: Request, res: Response): Promise<void> {
 
   // Block: not found, wrong password, inactive, OR OAuth-only (no passwordHash).
   if (!user || !user.passwordHash || !passwordValid || !user.isActive) {
+    const reason = !user
+      ? 'user_not_found'
+      : !user.passwordHash
+        ? 'oauth_only_account'
+        : !user.isActive
+          ? 'inactive'
+          : 'wrong_password'
+
+    await audit(req, 'LOGIN_FAILED', {
+      actorId: user?.id ?? null,
+      status: 'FAILURE',
+      errorMessage: INVALID_CREDENTIALS,
+      metadata: { email, reason },
+    })
+
     sendError(res, INVALID_CREDENTIALS, 401)
     return
   }
@@ -136,6 +162,11 @@ export async function login(req: Request, res: Response): Promise<void> {
   const refreshToken = await storeRefresh(user.id)
 
   logger.info({ userId: user.id }, 'User logged in')
+
+  await audit(req, 'LOGIN_SUCCESS', {
+    actorId: user.id,
+    metadata: { email: user.email },
+  })
 
   sendSuccess(res, {
     user: userAuthPayload(user),
@@ -164,6 +195,11 @@ export async function refresh(req: Request, res: Response): Promise<void> {
     // Reuse detected — nuke all sessions for this user.
     await TokenModel.deleteAllForUser(payload.sub)
     logger.warn({ userId: payload.sub }, 'Refresh token reuse detected — all sessions invalidated')
+    await audit(req, 'REFRESH_TOKEN_REUSE', {
+      actorId: payload.sub,
+      status: 'FAILURE',
+      errorMessage: 'Refresh token reuse detected',
+    })
     sendError(res, 'Session invalidated due to suspicious activity', 401)
     return
   }
@@ -256,6 +292,11 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     logger.error({ err, userId: user.id }, 'Password reset email failed')
   })
 
+  await audit(req, 'PASSWORD_RESET_REQUESTED', {
+    actorId: user.id,
+    metadata: { email: user.email, channel: 'link' },
+  })
+
   sendSuccess(res, null, FORGOT_PASSWORD_MESSAGE)
 }
 
@@ -269,6 +310,15 @@ export async function forgotPasswordOtp(req: Request, res: Response): Promise<vo
   await verifyPassword('ResetTimingNeutral1!', user?.passwordHash ?? DUMMY_HASH)
 
   if (!user || !user.isActive || !user.email) {
+    await audit(req, 'PASSWORD_OTP_REQUESTED', {
+      status: 'FAILURE',
+      errorMessage: !user
+        ? 'unknown_email'
+        : !user.isActive
+          ? 'inactive'
+          : 'no_email',
+      metadata: { email },
+    })
     sendSuccess(res, null, FORGOT_PASSWORD_MESSAGE)
     return
   }
@@ -278,6 +328,11 @@ export async function forgotPasswordOtp(req: Request, res: Response): Promise<vo
 
   void EmailService.sendPasswordOtpEmail(user.email, rawOtp).catch((err: unknown) => {
     logger.error({ err, userId: user.id }, 'Password OTP email failed')
+  })
+
+  await audit(req, 'PASSWORD_OTP_REQUESTED', {
+    actorId: user.id,
+    metadata: { email: user.email },
   })
 
   sendSuccess(res, null, FORGOT_PASSWORD_MESSAGE)
@@ -298,6 +353,12 @@ export async function verifyOtp(req: Request, res: Response): Promise<void> {
     !otpMatches(user.otp, otp)
 
   if (otpInvalid) {
+    await audit(req, 'PASSWORD_OTP_VERIFY_FAILED', {
+      actorId: user?.id ?? null,
+      status: 'FAILURE',
+      errorMessage: 'Invalid or expired OTP',
+      metadata: { email },
+    })
     sendError(res, 'Invalid or expired OTP', 400, 'INVALID_OTP')
     return
   }
@@ -308,6 +369,11 @@ export async function verifyOtp(req: Request, res: Response): Promise<void> {
   await TokenModel.deleteAllForUser(user.id)
 
   logger.info({ userId: user.id }, 'Password reset via OTP completed')
+
+  await audit(req, 'PASSWORD_OTP_VERIFY_SUCCESS', {
+    actorId: user.id,
+    metadata: { email: user.email },
+  })
 
   sendSuccess(res, null, 'Password updated successfully. Please sign in again.')
 }
@@ -328,6 +394,11 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
   await TokenModel.deleteAllForUser(userId)
 
   logger.info({ userId }, 'Password reset completed')
+
+  await audit(req, 'PASSWORD_RESET_COMPLETED', {
+    actorId: userId,
+    metadata: { channel: 'link' },
+  })
 
   sendSuccess(res, null, 'Password updated successfully. Please sign in again.')
 }
@@ -366,6 +437,11 @@ export async function deleteAccount(req: Request, res: Response): Promise<void> 
 
   logger.info({ userId: id }, 'User account deleted')
 
+  await audit(req, 'ACCOUNT_DELETED', {
+    actorId: id,
+    metadata: { email: user.email },
+  })
+
   sendSuccess(res, null, 'Account deleted successfully')
 }
 
@@ -391,14 +467,18 @@ export async function logout(req: Request, res: Response): Promise<void> {
   const { refreshToken } = req.body as { refreshToken: string }
 
   // Logout is idempotent — an already-expired token should still succeed.
+  let payloadSub: string | null = null
   try {
-    verifyRefresh(refreshToken)
+    payloadSub = verifyRefresh(refreshToken).sub
   } catch {
     sendSuccess(res, null, 'Logged out successfully')
     return
   }
 
   await TokenModel.deleteToken(refreshToken)
+
+  await audit(req, 'LOGOUT', { actorId: payloadSub })
+
   sendSuccess(res, null, 'Logged out successfully')
 }
 
@@ -420,6 +500,11 @@ export async function oauthSignin(req: Request, res: Response): Promise<void> {
       ? await OAuthService.verifyGoogleToken(idToken)
       : await OAuthService.verifyAppleToken(idToken)
   } catch {
+    await audit(req, 'LOGIN_FAILED', {
+      status: 'FAILURE',
+      errorMessage: 'Invalid OAuth token',
+      metadata: { provider },
+    })
     sendError(res, 'Invalid OAuth token', 401, 'INVALID_OAUTH_TOKEN')
     return
   }
@@ -435,12 +520,22 @@ export async function oauthSignin(req: Request, res: Response): Promise<void> {
   if (existing) {
     const user = existing.user
     if (!user.isActive || user.isBanned) {
+      await audit(req, 'LOGIN_FAILED', {
+        actorId: user.id,
+        status: 'FAILURE',
+        errorMessage: user.isBanned ? 'banned' : 'inactive',
+        metadata: { provider },
+      })
       sendError(res, 'Account is not active', 403)
       return
     }
     const accessToken  = signAccess(user.id, user.role)
     const refreshToken = await storeRefresh(user.id)
     logger.info({ userId: user.id, provider }, 'OAuth sign-in (existing)')
+    await audit(req, 'OAUTH_SIGNIN_EXISTING', {
+      actorId: user.id,
+      metadata: { provider, email: user.email },
+    })
     sendSuccess(res, { user: userAuthPayload(user), accessToken, refreshToken }, 'Signed in successfully')
     return
   }
@@ -498,6 +593,12 @@ export async function oauthSignin(req: Request, res: Response): Promise<void> {
   const refreshToken = await storeRefresh(user.id)
 
   logger.info({ userId: user.id, provider }, 'OAuth account created')
+
+  await audit(req, 'OAUTH_SIGNIN_NEW', {
+    actorId: user.id,
+    metadata: { provider, email: user.email },
+  })
+
   sendCreated(res, { user: userAuthPayload(user), accessToken, refreshToken }, 'Account created successfully')
 }
 
@@ -526,5 +627,11 @@ export async function deleteOAuthAccount(req: Request, res: Response): Promise<v
   await UserModel.deleteUser(id)
 
   logger.info({ userId: id }, 'OAuth user account deleted')
+
+  await audit(req, 'ACCOUNT_DELETED_OAUTH', {
+    actorId: id,
+    metadata: { email: user.email },
+  })
+
   sendSuccess(res, null, 'Account deleted successfully')
 }

@@ -138,6 +138,39 @@ enum AuditAction {
   DELETE_JOB 
   HARD_DELETE_JOB
   HARD_DELETE_OPPORTUNITY
+
+  // Auth & account lifecycle
+  SIGNUP
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  OAUTH_SIGNIN_EXISTING
+  OAUTH_SIGNIN_NEW
+  REFRESH_TOKEN_REUSE
+  ACCOUNT_DELETED
+  ACCOUNT_DELETED_OAUTH
+
+  // Password recovery
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  PASSWORD_OTP_REQUESTED
+  PASSWORD_OTP_VERIFY_SUCCESS
+  PASSWORD_OTP_VERIFY_FAILED
+
+  // User-driven content & moderation
+  JOB_CREATED
+  JOB_UPDATED
+  JOB_CLOSED
+  REPORT_CREATED
+
+  // Admin messaging
+  ADMIN_PUSH_SENT
+  ADMIN_NOTIFICATION_SENT
+}
+
+enum AuditLogStatus {
+  SUCCESS
+  FAILURE
 }
 
 enum ReportType {
@@ -698,21 +731,32 @@ model Notification {
 // ─────────────────────────────────────────
 
 model AuditLog {
-  id         String      @id @default(uuid())
-  actorId    String
-  targetId   String?
-  action     AuditAction
-  entityId   String?
-  entityType String?
-  metadata   Json?
-  createdAt  DateTime    @default(now())
+  id           String         @id @default(uuid())
+  actorId      String?
+  targetId     String?
+  action       AuditAction
+  entityId     String?
+  entityType   String?
+  metadata     Json?
+  status       AuditLogStatus @default(SUCCESS)
+  errorMessage String?
+  ipAddress    String?
+  userAgent    String?
+  requestId    String?
+  method       String?
+  path         String?
+  createdAt    DateTime       @default(now())
 
-  actor  User  @relation("AuditActor",  fields: [actorId],  references: [id], onDelete: Cascade)
+  actor  User? @relation("AuditActor",  fields: [actorId],  references: [id], onDelete: SetNull)
   target User? @relation("AuditTarget", fields: [targetId], references: [id], onDelete: SetNull)
 
   @@index([actorId])
   @@index([action])
+  @@index([entityType])
+  @@index([status])
+  @@index([requestId])
   @@index([createdAt])
+  @@index([action, createdAt])
 }
 
 // ─── JOB LIKES & COMMENTS ─────────────────────────────────────────────────────

@@ -117,6 +117,10 @@ export async function sendManualPush(req: Request, res: Response): Promise<void>
     'Admin manual push dispatched',
   )
 
+  await AuditLogModel.audit(req, 'ADMIN_PUSH_SENT', {
+    metadata: { title, recipientCount: userIds.length },
+  })
+
   sendSuccess(
     res,
     { recipientUserCount: userIds.length },
@@ -152,6 +156,16 @@ export async function sendInAppNotification(req: Request, res: Response): Promis
     { actorId: actorId(req), recipientCount: userIds.length, sendPush: !!sendPush, entityId },
     'Admin in-app notification dispatched',
   )
+
+  await AuditLogModel.audit(req, 'ADMIN_NOTIFICATION_SENT', {
+    entityId:   entityId ?? null,
+    entityType: entityId ? 'Notification' : null,
+    metadata: {
+      title,
+      recipientCount: userIds.length,
+      sendPush: !!sendPush,
+    },
+  })
 
   sendSuccess(
     res,
@@ -340,7 +354,7 @@ export async function adminDeletePost(req: Request, res: Response): Promise<void
     return
   }
 
-  await AuditLogModel.logAction(actorId(req), 'DELETE_POST', {
+  await AuditLogModel.audit(req, 'DELETE_POST', {
     entityId:   idParsed.data,
     entityType: 'Post',
   })
@@ -380,19 +394,34 @@ export async function listAuditLogs(req: Request, res: Response): Promise<void> 
     return
   }
 
-  const { cursor, limit, actorId: filterActorId, action } = parsed.data as AdminListAuditLogsQuery
+  const {
+    cursor,
+    limit,
+    actorId: filterActorId,
+    action,
+    entityId,
+    entityType,
+    status,
+    from,
+    to,
+    search,
+  } = parsed.data as AdminListAuditLogsQuery
 
   if (cursor && AuditLogModel.decodeCursor(cursor) === null) {
     sendError(res, 'Invalid cursor', 400, 'INVALID_CURSOR')
     return
   }
 
-  const { logs, nextCursor } = await AuditLogModel.listAuditLogs(
-    cursor,
-    limit,
-    filterActorId,
+  const { logs, nextCursor } = await AuditLogModel.listAuditLogs(cursor, limit, {
+    actorId: filterActorId,
     action,
-  )
+    entityId,
+    entityType,
+    status,
+    from,
+    to,
+    search,
+  })
 
   sendSuccess(res, { logs, nextCursor }, 'Audit logs')
 }
@@ -446,7 +475,7 @@ export async function adminSoftDeleteJob(req: Request, res: Response): Promise<v
   if (result === 'not_found') { sendError(res, 'Job not found', 404, 'NOT_FOUND'); return }
   if (result === 'already_deleted') { sendError(res, 'Job already deleted', 409, 'ALREADY_DELETED'); return }
 
-  await AuditLogModel.logAction(actorId(req), 'DELETE_JOB', { entityId: parsed.data, entityType: 'Job' })
+  await AuditLogModel.audit(req, 'DELETE_JOB', { entityId: parsed.data, entityType: 'Job' })
   logger.info({ actorId: actorId(req), jobId: parsed.data }, 'Admin soft-deleted job')
   sendNoContent(res)
 }
@@ -478,7 +507,7 @@ export async function adminHardDeleteJob(req: Request, res: Response): Promise<v
 
   if (result === 'not_found') { sendError(res, 'Job not found', 404, 'NOT_FOUND'); return }
 
-  await AuditLogModel.logAction(actorId(req), 'HARD_DELETE_JOB', { entityId: parsed.data, entityType: 'Job' })
+  await AuditLogModel.audit(req, 'HARD_DELETE_JOB', { entityId: parsed.data, entityType: 'Job' })
   logger.info({ actorId: actorId(req), jobId: parsed.data }, 'Admin hard-deleted job')
   sendNoContent(res)
 }
@@ -497,7 +526,7 @@ export async function adminSoftDeleteOpportunity(req: Request, res: Response): P
   if (result === 'not_found') { sendError(res, 'Opportunity not found', 404, 'NOT_FOUND'); return }
   if (result === 'already_deleted') { sendError(res, 'Opportunity already deleted', 409, 'ALREADY_DELETED'); return }
 
-  await AuditLogModel.logAction(actorId(req), 'DELETE_OPPORTUNITY', { entityId: parsed.data, entityType: 'Opportunity' })
+  await AuditLogModel.audit(req, 'DELETE_OPPORTUNITY', { entityId: parsed.data, entityType: 'Opportunity' })
   logger.info({ actorId: actorId(req), opportunityId: parsed.data }, 'Admin soft-deleted opportunity')
   sendNoContent(res)
 }
@@ -529,7 +558,7 @@ export async function adminHardDeleteOpportunity(req: Request, res: Response): P
 
   if (result === 'not_found') { sendError(res, 'Opportunity not found', 404, 'NOT_FOUND'); return }
 
-  await AuditLogModel.logAction(actorId(req), 'HARD_DELETE_OPPORTUNITY', { entityId: parsed.data, entityType: 'Opportunity' })
+  await AuditLogModel.audit(req, 'HARD_DELETE_OPPORTUNITY', { entityId: parsed.data, entityType: 'Opportunity' })
   logger.info({ actorId: actorId(req), opportunityId: parsed.data }, 'Admin hard-deleted opportunity')
   sendNoContent(res)
 }
