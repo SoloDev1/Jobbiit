@@ -1,6 +1,6 @@
 // middleware/rateLimiter.ts
 import type { Request } from 'express'
-import rateLimit from 'express-rate-limit'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import { env } from '../config/env'
 
 const rateLimitResponse = (message: string) => ({
@@ -37,7 +37,7 @@ export const forgotPasswordOtpLimiter = rateLimit({
       typeof req.body?.email === 'string'
         ? req.body.email.trim().toLowerCase()
         : 'unknown'
-    return `${req.ip}:${email}`
+    return `${ipKeyGenerator(req.ip ?? '')}:${email}`
   },
   message: rateLimitResponse(
     'Too many reset requests. Please try again in 15 minutes.',
