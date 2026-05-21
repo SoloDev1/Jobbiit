@@ -23,8 +23,16 @@ export const signupSchema = z
       .email('Invalid email address'),
 
     password: signupPasswordField,
+
+    // Native signup screens often send this — strip after validation, do not store.
+    confirmPassword: signupPasswordField.optional(),
   })
-  .strict()
+  .refine(
+    (data) =>
+      data.confirmPassword === undefined ||
+      data.password === data.confirmPassword,
+    { message: 'Passwords do not match', path: ['confirmPassword'] },
+  )
 
 export const loginSchema = z
   .object({

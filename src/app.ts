@@ -65,6 +65,15 @@ app.use(cors(buildCorsOptions()))
 
 app.use(express.json({ limit: '10kb' }))
 app.use(express.urlencoded({ extended: false, limit: '10kb' }))
+
+// Malformed JSON bodies (common when native clients stringify wrong) → 400, not 500.
+app.use((err: unknown, req: Request, res: Response, next: NextFunction): void => {
+  if (err instanceof SyntaxError && 'body' in err && req.path.startsWith('/api/')) {
+    sendError(res, 'Invalid JSON body', 400, 'INVALID_JSON')
+    return
+  }
+  next(err)
+})
 app.use(hpp())
 app.use(compression())
 app.use(globalLimiter)
