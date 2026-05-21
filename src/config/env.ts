@@ -20,9 +20,9 @@ const schema = z.object({
 
   BCRYPT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
 
+  // Comma-separated fallback if ALLOWED_ORIGINS is empty (ignored when `*`).
   CORS_ORIGIN:        z.string().default('*'),
-  // Comma-separated list of allowed origins used in production CORS config.
-  // Must be set in production — an empty value means no origins are whitelisted.
+  // Comma-separated browser origins for production CORS, e.g. https://app.example.com,http://localhost:19006
   ALLOWED_ORIGINS:    z.string().default(''),
   RATE_LIMIT_WINDOW:  z.coerce.number().int().positive().default(15 * 60 * 1000),
   RATE_LIMIT_MAX:     z.coerce.number().int().positive().default(100),

@@ -22,6 +22,7 @@ import multer          from 'multer'
 import { ZodError }    from 'zod'
 
 import { env, isProd }        from './config/env'
+import { buildCorsOptions }     from './config/cors'
 import { logger }             from './config/logger'
 import { connectDb, prisma }  from './config/db'
 import { globalLimiter }      from './middleware/rateLimiter'
@@ -49,8 +50,9 @@ app.set('trust proxy', 1)
 app.use(
   helmet({
     contentSecurityPolicy:        true,
-    crossOriginEmbedderPolicy:    true,
-    crossOriginResourcePolicy:    { policy: 'same-origin' },
+    // API is consumed cross-origin by web/Expo — same-origin CORP blocks browser clients.
+    crossOriginEmbedderPolicy:    false,
+    crossOriginResourcePolicy:    { policy: 'cross-origin' },
     referrerPolicy:               { policy: 'no-referrer' },
     hsts:                         { maxAge: 31_536_000, includeSubDomains: true, preload: true },
     noSniff:                      true,
@@ -59,19 +61,7 @@ app.use(
   }),
 )
 
-app.use(
-  cors({
-    // Production: explicit per-origin whitelist from env — never wildcard '*'.
-    // Development: localhost dev servers only.
-    origin: isProd
-      ? env.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
-      : ['http://localhost:8081', 'http://localhost:3000'],
-    methods:        ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials:    true,
-    maxAge:         86_400, // cache preflight 24h
-  }),
-)
+app.use(cors(buildCorsOptions()))
 
 app.use(express.json({ limit: '10kb' }))
 app.use(express.urlencoded({ extended: false, limit: '10kb' }))
