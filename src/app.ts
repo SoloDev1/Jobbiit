@@ -41,6 +41,9 @@ import adminRoutes            from './routes/admin.routes'
 
 export const app = express()
 
+// Behind Render/nginx — must be set before rate limiting so req.ip is the client IP.
+app.set('trust proxy', 1)
+
 // ─── 1. Security middleware ───────────────────────────────────────────────────
 
 app.use(
@@ -76,8 +79,6 @@ app.use(hpp())
 app.use(compression())
 app.use(globalLimiter)
 
-app.set('trust proxy', 1) 
-
 // ─── 2. Request hygiene middleware ────────────────────────────────────────────
 
 // Attach a unique ID to every request so logs can be correlated end-to-end.
@@ -99,6 +100,14 @@ app.use((req: Request, _res: Response, next: NextFunction): void => {
 })
 
 // ─── 3. Health checks ─────────────────────────────────────────────────────────
+
+// Render and other platforms often probe `/` — avoid noisy 404s in logs.
+app.get('/', (_req: Request, res: Response): void => {
+  res.redirect(302, '/health/ping')
+})
+app.head('/', (_req: Request, res: Response): void => {
+  res.sendStatus(200)
+})
 
 // Ultra-lightweight ping — used by load balancers polling every few seconds.
 app.get('/health/ping', (_req: Request, res: Response): void => {
