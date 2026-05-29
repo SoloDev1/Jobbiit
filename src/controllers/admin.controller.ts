@@ -128,8 +128,10 @@ export async function sendManualPush(req: Request, res: Response): Promise<void>
     sendSuccess(res, { recipientUserCount: 0 }, 'No users found to notify')
     return;
   }
-logger.info({ targetIds }, 'UUIDs being sent to PushService');
-  await PushService.sendPushToUsers(targetIds, title, body, data)
+   logger.info({ targetIds }, 'UUIDs being sent to PushService');
+
+  const pushData = data || { kind: 'SYSTEM' };
+  await PushService.sendPushToUsers(targetIds, title, body, pushData)
 
   logger.info(
     { actorId: actorId(req), recipientCount: targetIds.length, title, broadcast },
