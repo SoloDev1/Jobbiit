@@ -109,12 +109,10 @@ export async function dismissReport(req: Request, res: Response): Promise<void> 
 // ─── Push / in-app notifications ─────────────────────────────────────────────
 
 export async function sendManualPush(req: Request, res: Response): Promise<void> {
-  // 1. Extract the new broadcast flag (defaulting to false)
   const { title, body, userIds = [], data, broadcast = false } = req.body as AdminManualPushInput
 
   let targetIds = userIds;
 
-  // 2. If broadcasting, fetch all active users directly from the database
   if (broadcast) {
     const allUsers = await prisma.user.findMany({
       where: { isActive: true, isBanned: false },
@@ -123,15 +121,15 @@ export async function sendManualPush(req: Request, res: Response): Promise<void>
     targetIds = allUsers.map((u) => u.id);
   }
 
-  // 3. Safety check to prevent empty pushes
   if (targetIds.length === 0) {
     sendSuccess(res, { recipientUserCount: 0 }, 'No users found to notify')
     return;
   }
-   logger.info({ targetIds }, 'UUIDs being sent to PushService');
+  
+  logger.info({ targetIds }, 'UUIDs being sent to PushService');
 
-  const pushData = data || { kind: 'SYSTEM' };
-  await PushService.sendPushToUsers(targetIds, title, body, pushData)
+  // 👇 FIX: Passing 'data' exactly as it was in your old working code
+  await PushService.sendPushToUsers(targetIds, title, body, data)
 
   logger.info(
     { actorId: actorId(req), recipientCount: targetIds.length, title, broadcast },
