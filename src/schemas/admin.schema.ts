@@ -59,7 +59,7 @@ export type ChangeRoleInput = z.infer<typeof changeRoleSchema>
 
 export const adminListUsersQuerySchema = z.object({
   cursor:   z.string().optional(),
-  limit:    z.coerce.number().int().positive().max(100).default(20),
+  limit:    z.coerce.number().int().positive().max(1000).default(20),
   search:   z.string().trim().optional(),
   role:     z.nativeEnum(Role).optional(),
   isBanned: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
