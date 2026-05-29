@@ -4,12 +4,16 @@ import { Role, AuditAction, AuditLogStatus } from '@prisma/client'
 // ─── Push / in-app ────────────────────────────────────────────────────────────
 
 /** Admin-initiated Expo push to a bounded list of user IDs (must have registered a device token). */
+
 export const adminManualPushSchema = z
   .object({
-    title:   z.string().trim().min(1).max(120),
-    body:    z.string().trim().min(1).max(500),
-    userIds: z.array(z.string().uuid()).min(1).max(500),
-    data:    z.record(z.string(), z.unknown()).optional(),
+    title:     z.string().trim().min(1).max(120),
+    body:      z.string().trim().min(1).max(500),
+    // 1. Remove .min(1) so empty arrays [] are allowed
+    userIds:   z.array(z.string().uuid()).max(500).optional(), 
+    // 2. Add the broadcast flag so .strict() doesn't reject it
+    broadcast: z.boolean().optional(),
+    data:      z.record(z.string(), z.unknown()).optional(),
   })
   .strict()
 
@@ -19,12 +23,16 @@ export type AdminManualPushInput = z.infer<typeof adminManualPushSchema>
  * Admin-created in-app notifications (stored in DB) with optional push fan-out.
  * Note: DB Notification only stores `message`, so we embed title + body there.
  */
+
 export const adminInAppNotificationSchema = z
   .object({
     title:      z.string().trim().min(1).max(120),
     body:       z.string().trim().min(1).max(500),
-    userIds:    z.array(z.string().uuid()).min(1).max(500),
+    // 1. Remove .min(1) here as well
+    userIds:    z.array(z.string().uuid()).max(500).optional(),
     sendPush:   z.boolean().optional().default(false),
+    // 2. Add the broadcast flag here
+    broadcast:  z.boolean().optional(),
     entityId:   z.string().optional(),
   })
   .strict()
