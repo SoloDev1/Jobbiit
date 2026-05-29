@@ -108,33 +108,69 @@ export async function dismissReport(req: Request, res: Response): Promise<void> 
 // ─── Push / in-app notifications ─────────────────────────────────────────────
 
 export async function sendManualPush(req: Request, res: Response): Promise<void> {
-  const { title, body, userIds, data } = req.body as AdminManualPushInput
+  // 1. Extract the new broadcast flag (defaulting to false)
+  const { title, body, userIds = [], data, broadcast = false } = req.body as AdminManualPushInput
 
-  await PushService.sendPushToUsers(userIds, title, body, data)
+  let targetIds = userIds;
+
+  // 2. If broadcasting, fetch all active users directly from the database
+  if (broadcast) {
+    const allUsers = await prisma.user.findMany({
+      where: { isActive: true, isBanned: false },
+      select: { id: true },
+    });
+    targetIds = allUsers.map((u) => u.id);
+  }
+
+  // 3. Safety check to prevent empty pushes
+  if (targetIds.length === 0) {
+    sendSuccess(res, { recipientUserCount: 0 }, 'No users found to notify')
+    return;
+  }
+
+  await PushService.sendPushToUsers(targetIds, title, body, data)
 
   logger.info(
-    { actorId: actorId(req), recipientCount: userIds.length, title },
+    { actorId: actorId(req), recipientCount: targetIds.length, title, broadcast },
     'Admin manual push dispatched',
   )
 
   await AuditLogModel.audit(req, 'ADMIN_PUSH_SENT', {
-    metadata: { title, recipientCount: userIds.length },
+    metadata: { title, recipientCount: targetIds.length, broadcast },
   })
 
   sendSuccess(
     res,
-    { recipientUserCount: userIds.length },
+    { recipientUserCount: targetIds.length },
     'Push sent to registered devices for the given users',
   )
 }
 
 export async function sendInAppNotification(req: Request, res: Response): Promise<void> {
-  const { title, body, userIds, sendPush, entityId } = req.body as AdminInAppNotificationInput
+  // 1. Extract the broadcast flag here as well
+  const { title, body, userIds = [], sendPush, entityId, broadcast = false } = req.body as AdminInAppNotificationInput
+
+  let targetIds = userIds;
+
+  // 2. Fetch all active users if broadcasting
+  if (broadcast) {
+    const allUsers = await prisma.user.findMany({
+      where: { isActive: true, isBanned: false },
+      select: { id: true },
+    });
+    targetIds = allUsers.map((u) => u.id);
+  }
+
+  if (targetIds.length === 0) {
+    sendSuccess(res, { recipientUserCount: 0, notificationIds: [] }, 'No users found to notify')
+    return;
+  }
 
   const message = `${title}\n\n${body}`.trim()
 
+  // 3. Create the notifications using the expanded targetIds list
   const created = await Promise.all(
-    userIds.map((recipientId) =>
+    targetIds.map((recipientId) =>
       NotificationModel.createNotification(
         recipientId,
         'SYSTEM',
@@ -146,14 +182,14 @@ export async function sendInAppNotification(req: Request, res: Response): Promis
   )
 
   if (sendPush) {
-    await PushService.sendPushToUsers(userIds, title, body, {
+    await PushService.sendPushToUsers(targetIds, title, body, {
       kind: 'SYSTEM',
       entityId: entityId ?? null,
     })
   }
 
   logger.info(
-    { actorId: actorId(req), recipientCount: userIds.length, sendPush: !!sendPush, entityId },
+    { actorId: actorId(req), recipientCount: targetIds.length, sendPush: !!sendPush, entityId, broadcast },
     'Admin in-app notification dispatched',
   )
 
@@ -162,18 +198,18 @@ export async function sendInAppNotification(req: Request, res: Response): Promis
     entityType: entityId ? 'Notification' : null,
     metadata: {
       title,
-      recipientCount: userIds.length,
+      recipientCount: targetIds.length,
       sendPush: !!sendPush,
+      broadcast,
     },
   })
 
   sendSuccess(
     res,
-    { recipientUserCount: userIds.length, notificationIds: created.map((c) => c.id) },
+    { recipientUserCount: targetIds.length, notificationIds: created.map((c) => c.id) },
     'In-app notifications created',
   )
 }
-
 // ─── User management ──────────────────────────────────────────────────────────
 
 export async function listUsers(req: Request, res: Response): Promise<void> {
