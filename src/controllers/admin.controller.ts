@@ -33,6 +33,7 @@ import * as UploadService from '../services/upload.service'
 import * as JobModel from '../models/Job'
 import * as OpportunityModel from '../models/Opportunity'
 import type { UpdateJobInput } from '../schemas/job.schema'
+import { prisma } from '../config/db'
 
 
 
