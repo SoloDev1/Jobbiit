@@ -63,6 +63,19 @@ const schema = z.object({
    * No secret needed for native iOS token verification (public key fetch is automatic).
    */
   APPLE_CLIENT_ID: z.string().min(1),
+
+  // Redis VPS
+  REDIS_URL: z.string().url().default('redis://127.0.0.1:6379'),
+
+  // OpenAI
+  OPENAI_API_KEY: z.string().min(1),
+
+  // Cloudflare R2
+  CF_ACCOUNT_ID: z.string().min(1),
+  CF_R2_ACCESS_KEY_ID: z.string().min(1),
+  CF_R2_SECRET_ACCESS_KEY: z.string().min(1),
+  CF_R2_BUCKET_NAME: z.string().min(1),
+  CF_R2_PUBLIC_URL: z.string().optional(),
 })
 
 const parsed = schema.safeParse(process.env)

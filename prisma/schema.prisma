@@ -91,6 +91,7 @@ enum OpportunityCategory {
   CONFERENCE      // ← add
   ACCELERATOR     // ← add
   TRAINING        // ← add
+  VISA
   AWARD      
   OTHER
 }
@@ -252,6 +253,8 @@ model User {
   auditLogsTarget     AuditLog[]               @relation("AuditTarget")
   pushTokenRecord     PushToken?               @relation("UserPushToken")
   passwordResetTokens PasswordResetToken[]
+  generatedDocuments  GeneratedDocument[]
+  chatSessions        ChatSession[]
 
   @@index([email])
   @@index([role])
@@ -834,4 +837,97 @@ model OAuthAccount {
 
   @@unique([provider, subject])
   @@index([userId])
+}
+
+// ─── AI GENERATED DOCUMENTS ───────────────────────────────────────────────────
+
+model GeneratedDocument {
+  id             String         @id @default(uuid())
+  userId         String
+  type           DocumentType
+  format         DocumentFormat
+  status         DocStatus      @default(PROCESSING)
+  pdfUrl         String?
+  docxUrl        String?
+  r2PdfKey       String?        // R2 object key for deletion
+  r2DocxKey      String?
+  metadata       Json?          // store the input data
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  retryCount     Int            @default(0)
+  errorMessage   String?
+  lastAccessedAt DateTime?
+  expiresAt      DateTime?      // set to createdAt + 30 days on creation
+
+  @@index([userId])
+  @@index([status])
+  @@index([status, updatedAt])
+  @@index([expiresAt])
+  @@index([lastAccessedAt])
+}
+
+enum DocumentType {
+  CV
+  GRANT
+  SCHOLARSHIP
+}
+
+enum DocumentFormat {
+  PDF
+  DOCX
+  BOTH
+}
+
+enum DocStatus {
+  PROCESSING
+  DONE
+  FAILED
+}
+
+// ─── AI CHATBOT ───────────────────────────────────────────────────────────────
+
+model ChatSession {
+  id        String        @id @default(uuid())
+  userId    String
+  mode      ChatMode      @default(GENERAL)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([mode])
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  sessionId String
+  sender    MessageRole
+  content   String
+  createdAt DateTime    @default(now())
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+enum ChatMode {
+  GENERAL
+  CV_REVIEW
+  COVER_LETTER
+  INTERVIEW_COACH
+  CAREER_ADVISER
+  SKILLS_GAP
+  OPPORTUNITY_INTEL
+  JOB_MATCHER
+  SCHOLARSHIP_FINDER
+  GRANT_FINDER
+  VISA_ADVISER
+  MENTORSHIP_RECOMMENDATION
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
 }

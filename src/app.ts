@@ -36,6 +36,9 @@ import notificationRoutes     from './routes/notification.routes'
 import pushRoutes             from './routes/push.routes'
 import reportRoutes           from './routes/report.routes'
 import adminRoutes            from './routes/admin.routes'
+import documentRoutes         from './modules/document-generator/document-generator.routes'
+import chatbotRoutes          from './modules/chatbot/chatbot.routes'
+import { initWorker, registerCronJobs } from './modules/document-generator/document-generator.queue'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
@@ -144,6 +147,8 @@ app.use('/api/notifications', notificationRoutes)
 app.use('/api/push', pushRoutes)
 app.use('/api/reports', reportRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/documents', documentRoutes)
+app.use('/api/chatbot', chatbotRoutes)
 
 // Stub routers for features not yet implemented.
 // Each returns 501 so routes are discoverable and testable from day one.
@@ -267,6 +272,12 @@ let server: ReturnType<typeof app.listen> | undefined
 
 async function start(): Promise<void> {
   await connectDb()
+  
+  if (env.NODE_ENV !== 'test') {
+    initWorker();
+    await registerCronJobs();
+  }
+
   server = app.listen(env.PORT, () => {
     logger.info({ port: env.PORT, env: env.NODE_ENV }, 'Server started')
   })
