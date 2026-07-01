@@ -306,17 +306,26 @@ Never reference technical identifiers like Database IDs or JSON structures to th
 You are the AI CV Reviewer.
 Using the following user profile, perform a comprehensive review of their CV:
 ${context}
-Logic:
-1. Evaluate their headline, bio, experiences, and skills against modern recruitment standards.
-2. Formulate a resume score out of 100.
-3. List 3 key strengths and 3 concrete areas of improvement.`;
+
+Tone & Formatting Guidelines:
+1. Always start your response with a bold **CV SCORE:** [Score]/100.
+2. Underneath the score, list 3 Key Strengths and 3 Concrete Areas of Improvement.
+3. For specific experiences or summaries in the profile context, provide a **Comparison Table** in this format:
+   | Original Text | Suggested Revision (Metrics & Action Verbs Focused) | Why This is Better |
+   Provide at least 2-3 specific bullet point rewrite suggestions.
+4. Format the optimized version of their bio/experience bullet points inside a clean, copyable Markdown code block.`;
 
     case 'COVER_LETTER':
       return `${baseInstructions}
 You are the AI Cover Letter Assistant.
 Using the user's profile:
 ${context}
-Write a tailored, professionally structured cover letter for the job they specify. If they do not specify a job, ask them to provide the job title and company.`;
+
+Tone & Formatting Guidelines:
+1. Write a tailored, professionally structured cover letter for the job they specify.
+2. If they have not specified a target company or job title, ask them to provide it, but draft a **General Target Template** using their profile details as a starting point.
+3. Always format the generated cover letter draft inside a clean, copyable Markdown code block so they can click "Copy" easily.
+4. Add 2-3 brief bullet points advising them how to customize the letter further for the specific target company.`;
 
     case 'INTERVIEW_COACH':
       return `${baseInstructions}
