@@ -84,6 +84,13 @@ export async function toggleSave(req: Request, res: Response): Promise<void> {
     return
   }
 
+  if (result.saved) {
+    await audit(req, 'OPPORTUNITY_SAVED', {
+      entityId:   parsed.data,
+      entityType: 'Opportunity',
+    })
+  }
+
   sendSuccess(res, result, result.saved ? 'Opportunity saved' : 'Opportunity unsaved')
 }
 
@@ -113,6 +120,13 @@ export async function applyToOpportunity(req: Request, res: Response): Promise<v
   }
 
   logger.info({ userId: userId(req), opportunityId: parsed.data }, 'Opportunity application submitted')
+
+  await audit(req, 'OPPORTUNITY_APPLIED', {
+    entityId:   parsed.data,
+    entityType: 'Opportunity',
+    metadata:   { mode: 'direct_apply' },
+  })
+
   sendCreated(res, result, 'Application submitted')
 }
 

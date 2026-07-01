@@ -5,6 +5,8 @@ import { sendCreated, sendError, sendSuccess } from '../../utils/apiResponse';
 import { handleChatbotTurn } from './chatbot.service';
 import xss from 'xss';
 import { z } from 'zod';
+import { audit } from '../../models/AuditLog';
+
 
 const createSessionSchema = z.object({
   mode: z.enum([
@@ -52,6 +54,12 @@ export async function createOrGetSession(req: Request, res: Response): Promise<v
           userId,
           mode,
         },
+      });
+
+      await audit(req, 'CHAT_STARTED', {
+        entityId:   session.id,
+        entityType: 'ChatSession',
+        metadata:   { mode },
       });
     }
 

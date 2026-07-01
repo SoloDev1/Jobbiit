@@ -167,6 +167,13 @@ enum AuditAction {
   // Admin messaging
   ADMIN_PUSH_SENT
   ADMIN_NOTIFICATION_SENT
+
+  // User important actions
+  ONBOARDING_COMPLETED
+  DOCUMENT_GENERATED
+  CHAT_STARTED
+  OPPORTUNITY_SAVED
+  OPPORTUNITY_APPLIED
 }
 
 enum AuditLogStatus {

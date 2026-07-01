@@ -254,6 +254,11 @@ export async function completeOnboarding(req: Request, res: Response): Promise<v
     return
   }
 
+  await audit(req, 'ONBOARDING_COMPLETED', {
+    actorId: id,
+    metadata: { completedAt: at },
+  })
+
   sendSuccess(res, {
     onboardingComplete: true,
     onboardingCompletedAt: at.toISOString(),

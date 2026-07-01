@@ -6,6 +6,8 @@ import { generateDocumentSchema } from './document-generator.schema';
 import { documentQueue } from './document-generator.queue';
 import { generatePresignedUrl, deleteDocument } from './services/storage.service';
 import xss from 'xss';
+import { audit } from '../../models/AuditLog';
+
 
 /**
  * Helper to recursively sanitize all string values in an object using xss().
@@ -72,6 +74,12 @@ export async function generateDocument(req: Request, res: Response): Promise<voi
   });
 
   logger.info({ documentId: doc.id, jobId: job.id, userId }, 'Document generation job queued');
+
+  await audit(req, 'DOCUMENT_GENERATED', {
+    entityId:   doc.id,
+    entityType: 'GeneratedDocument',
+    metadata:   { type, format },
+  });
 
   sendCreated(res, {
     jobId: doc.id,

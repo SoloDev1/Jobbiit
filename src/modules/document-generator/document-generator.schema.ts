@@ -52,8 +52,8 @@ const scholarshipSchema = z.object({
 });
 
 export const generateDocumentSchema = z.object({
-  type: z.enum(['cv', 'grant', 'scholarship'] as const, { error: 'Type must be cv, grant, or scholarship' }),
-  format: z.enum(['pdf', 'docx', 'both'] as const, { error: 'Format must be pdf, docx, or both' }),
+  type: z.enum(['cv', 'grant', 'scholarship'] as const, { required_error: 'Type must be cv, grant, or scholarship', invalid_type_error: 'Type must be cv, grant, or scholarship' }),
+  format: z.enum(['pdf', 'docx', 'both'] as const, { required_error: 'Format must be pdf, docx, or both', invalid_type_error: 'Format must be pdf, docx, or both' }),
   data: z.discriminatedUnion('type', [
     cvSchema,
     grantSchema,
