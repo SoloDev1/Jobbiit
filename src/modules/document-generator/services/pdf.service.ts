@@ -2,15 +2,16 @@ import React from 'react';
 import { CVPdfTemplate } from '../templates/cv/cv-pdf.template';
 import { GrantPdfTemplate } from '../templates/grant/grant-pdf.template';
 import { ScholarshipPdfTemplate } from '../templates/scholarship/scholarship-pdf.template';
+import { CoverLetterPdfTemplate } from '../templates/cover_letter/cover-letter-pdf.template';
 import { DocumentDataInput, AIEnhancedOutput } from '../document-generator.types';
 
 /**
  * Orchestrates rendering the appropriate JSX template to a PDF Buffer.
  */
 export async function generatePDF(
-  type: 'cv' | 'grant' | 'scholarship',
+  type: 'cv' | 'grant' | 'scholarship' | 'cover_letter',
   originalData: DocumentDataInput,
-  enhancedData: AIEnhancedOutput
+  enhancedData: AIEnhancedOutput | null
 ): Promise<Buffer> {
   // Dynamically import to prevent compile issues on build
   const { renderToBuffer, Document, Page, Text, View, StyleSheet } = await import('@react-pdf/renderer');
@@ -34,6 +35,11 @@ export async function generatePDF(
     element = React.createElement(ScholarshipPdfTemplate, {
       originalData: originalData as any,
       enhancedData: enhancedData as any,
+      pdf: pdfComponents,
+    });
+  } else if (type === 'cover_letter') {
+    element = React.createElement(CoverLetterPdfTemplate, {
+      data: originalData as any,
       pdf: pdfComponents,
     });
   } else {

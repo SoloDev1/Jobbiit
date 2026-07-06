@@ -7,6 +7,8 @@ const cvSchema = z.object({
   phone: z.string().optional(),
   location: z.string().optional(),
   summary: z.string().optional(),
+  style: z.string().optional(),
+  color: z.string().optional(),
   experience: z.array(
     z.object({
       title: z.string().min(1, 'Job title is required'),
@@ -51,17 +53,42 @@ const scholarshipSchema = z.object({
   careerGoals: z.string().optional(),
 });
 
+const coverLetterSchema = z.object({
+  type: z.literal('cover_letter'),
+  style: z.enum(['classic-formal', 'modern-accent']).optional(),
+  applicantName: z.string().min(1, 'Applicant name is required'),
+  applicantTitle: z.string().optional(),
+  applicantEmail: z.string().optional(),
+  applicantPhone: z.string().optional(),
+  applicantAddress: z.string().optional(),
+  recipientName: z.string().optional(),
+  recipientTitle: z.string().optional(),
+  recipientCompany: z.string().optional(),
+  recipientAddress: z.string().optional(),
+  jobTitle: z.string().optional(),
+  bodyParagraph1: z.string().min(1, 'Opening paragraph is required'),
+  bodyParagraph2: z.string().optional(),
+  bodyParagraph3: z.string().optional(),
+});
+
 export const generateDocumentSchema = z.object({
-  type: z.enum(['cv', 'grant', 'scholarship'] as const, { required_error: 'Type must be cv, grant, or scholarship', invalid_type_error: 'Type must be cv, grant, or scholarship' }),
-  format: z.enum(['pdf', 'docx', 'both'] as const, { required_error: 'Format must be pdf, docx, or both', invalid_type_error: 'Format must be pdf, docx, or both' }),
+  type: z.enum(['cv', 'grant', 'scholarship', 'cover_letter'] as const, {
+    required_error: 'Type must be cv, grant, scholarship, or cover_letter',
+    invalid_type_error: 'Type must be cv, grant, scholarship, or cover_letter',
+  }),
+  format: z.enum(['pdf', 'docx', 'both'] as const, {
+    required_error: 'Format must be pdf, docx, or both',
+    invalid_type_error: 'Format must be pdf, docx, or both',
+  }),
   data: z.discriminatedUnion('type', [
     cvSchema,
     grantSchema,
     scholarshipSchema,
+    coverLetterSchema,
   ]),
 }).refine(val => val.type === val.data.type, {
-  message: "Root type must match data.type",
-  path: ["type"]
+  message: 'Root type must match data.type',
+  path: ['type'],
 });
 
 export type GenerateDocumentInput = z.infer<typeof generateDocumentSchema>;

@@ -13,10 +13,13 @@ const openai = new OpenAI({
  * Defaults to gpt-4o-mini for cost efficiency and speed.
  * Enforces a max token limit and checks/writes prompt completions to the VPS Redis cache.
  */
-export async function enhanceContent(type: 'cv' | 'grant' | 'scholarship', data: DocumentDataInput): Promise<AIEnhancedOutput> {
+export async function enhanceContent(type: 'cv' | 'grant' | 'scholarship' | 'cover_letter', data: DocumentDataInput): Promise<AIEnhancedOutput | null> {
+  if (type === 'cover_letter') {
+    return null;
+  }
   // 1. Check prompt cache in VPS Redis
   try {
-    const cached = await getCachedAIResponse(type, data);
+    const cached = await getCachedAIResponse(type as any, data);
     if (cached) {
       return JSON.parse(cached) as AIEnhancedOutput;
     }

@@ -24,6 +24,8 @@ export interface CVInput {
   experience: ExperienceInput[];
   education: EducationInput[];
   skills: string[];
+  style?: string;
+  color?: string;
 }
 
 export interface GrantInput {
@@ -49,12 +51,30 @@ export interface ScholarshipInput {
   careerGoals?: string;
 }
 
-export type DocumentDataInput = CVInput | GrantInput | ScholarshipInput;
+export interface CoverLetterInput {
+  type: 'cover_letter';
+  style?: 'classic-formal' | 'modern-accent';
+  applicantName: string;
+  applicantTitle?: string;
+  applicantEmail?: string;
+  applicantPhone?: string;
+  applicantAddress?: string;
+  recipientName?: string;
+  recipientTitle?: string;
+  recipientCompany?: string;
+  recipientAddress?: string;
+  jobTitle?: string;
+  bodyParagraph1: string;
+  bodyParagraph2?: string;
+  bodyParagraph3?: string;
+}
+
+export type DocumentDataInput = CVInput | GrantInput | ScholarshipInput | CoverLetterInput;
 
 export interface DocumentGenerateJobPayload {
   documentId: string;
   userId: string;
-  type: 'cv' | 'grant' | 'scholarship';
+  type: 'cv' | 'grant' | 'scholarship' | 'cover_letter';
   format: 'pdf' | 'docx' | 'both';
   data: DocumentDataInput;
 }

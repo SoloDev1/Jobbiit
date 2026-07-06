@@ -53,7 +53,7 @@ export const opportunitiesQuerySchema = z.object({
     .optional(),
   search:          z.string().trim().optional(),
   cursor:          z.string().optional(),
-  limit:           z.coerce.number().int().positive().max(50).default(20),
+  limit:           z.coerce.number().int().positive().max(100).default(20),
 })
 
 export type CreateOpportunityInput        = z.infer<typeof createOpportunitySchema>
