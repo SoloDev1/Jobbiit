@@ -10,6 +10,7 @@ import {
 } from '../utils/apiResponse'
 import * as ProfileModel from '../models/Profile'
 import * as UploadService from '../services/upload.service'
+import * as CvParserService from '../services/cvParser.service'
 import type {
   CreateProfileInput,
   UpdateProfileInput,
@@ -240,4 +241,34 @@ export async function uploadBanner(req: Request, res: Response): Promise<void> {
   logger.info({ userId: userId(req) }, 'Banner uploaded')
 
   sendSuccess(res, { bannerUrl: updated.bannerUrl }, 'Banner updated successfully')
+}
+
+// ─── uploadAndParseCv ───────────────────────────────────────────────────────────
+
+export async function uploadAndParseCv(req: Request, res: Response): Promise<void> {
+  const file = req.file
+  if (!file) {
+    sendError(res, 'No CV file uploaded', 400, 'FILE_REQUIRED')
+    return
+  }
+
+  try {
+    // 1. Extract raw text locally using mammoth / pdf-parse
+    const rawText = await CvParserService.extractTextFromBuffer(file.buffer, file.mimetype)
+
+    // Sanity check on the text content size
+    if (rawText.trim().length < 200) {
+      sendError(res, 'Extracted text is too short. Please upload a structured PDF or Word document', 400, 'TEXT_TOO_SHORT')
+      return
+    }
+
+    // 2. Format with OpenAI structured output
+    const structuredData = await CvParserService.parseResumeText(rawText)
+
+    // 3. Return JSON response to client
+    sendSuccess(res, structuredData, 'CV parsed successfully')
+  } catch (err: any) {
+    logger.error({ err, userId: userId(req) }, 'CV parsing failed')
+    sendError(res, err.message || 'Error processing CV file', 500, 'PARSING_ERROR')
+  }
 }

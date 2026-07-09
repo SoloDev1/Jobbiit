@@ -28,7 +28,7 @@ function createSectionTitle(title: string, font: string, color: string, align: a
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. DEFAULT STYLE (Adebayo Ajayi centered blue layout design)
+// 1. DEFAULT STYLE (John Doe centered blue layout design)
 // ─────────────────────────────────────────────────────────────────────────────
 function generateDefaultDocx(originalData: CVInput, enhancedData: CVEnhancedData): Document {
   const children: any[] = [];
@@ -185,7 +185,7 @@ function generateDefaultDocx(originalData: CVInput, enhancedData: CVEnhancedData
           children.push(
             new Paragraph({
               spacing: { before: 0, after: 0, line: 240 },
-              indent: { left: 360, firstLine: -180 },
+              indent: { left: 360, hanging: 180 },
               children: [
                 new TextRun({
                   text: '●  ',
@@ -207,28 +207,34 @@ function generateDefaultDocx(originalData: CVInput, enhancedData: CVEnhancedData
     }
   }
 
-  // 3. Skills
+  // 3. Skills (two-column layout)
   const skillsList = enhancedData?.skills || originalData.skills;
   if (skillsList && skillsList.length > 0) {
     children.push(createSectionTitle('Skills', font, accentColor, AlignmentType.CENTER));
-    for (const skill of skillsList) {
+    const halfSkills = Math.ceil(skillsList.length / 2);
+    const skillsCol1 = skillsList.slice(0, halfSkills);
+    const skillsCol2 = skillsList.slice(halfSkills);
+    const maxLen = Math.max(skillsCol1.length, skillsCol2.length);
+    for (let i = 0; i < maxLen; i++) {
+      const leftSkill = skillsCol1[i];
+      const rightSkill = skillsCol2[i];
       children.push(
         new Paragraph({
+          tabStops: [{ type: TabStopType.LEFT, position: Math.floor(printableWidth / 2) }],
           spacing: { before: 0, after: 0, line: 240 },
-          indent: { left: 360, firstLine: -180 },
           children: [
-            new TextRun({
-              text: '●  ',
-              size: 21,
-              font: font,
-              color: '111111',
-            }),
-            new TextRun({
-              text: skill,
-              size: 21,
-              font: font,
-              color: '222222',
-            }),
+            ...(leftSkill
+              ? [
+                  new TextRun({ text: '●  ', size: 21, font: font, color: '111111' }),
+                  new TextRun({ text: leftSkill, size: 21, font: font, color: '222222' }),
+                ]
+              : []),
+            ...(rightSkill
+              ? [
+                  new TextRun({ text: '\t●  ', size: 21, font: font, color: '111111' }),
+                  new TextRun({ text: rightSkill, size: 21, font: font, color: '222222' }),
+                ]
+              : []),
           ],
         })
       );
@@ -244,7 +250,7 @@ function generateDefaultDocx(originalData: CVInput, enhancedData: CVEnhancedData
       children.push(
         new Paragraph({
           spacing: { before: 0, after: 0, line: 240 },
-          indent: { left: 360, firstLine: -180 },
+          indent: { left: 360, hanging: 180 },
           children: [
             new TextRun({
               text: '●  ',
@@ -253,10 +259,11 @@ function generateDefaultDocx(originalData: CVInput, enhancedData: CVEnhancedData
               color: '111111',
             }),
             new TextRun({
-              text: p.name ? `${p.name}: ${pDesc}` : pDesc,
+              text: p.name || pDesc,
               size: 21,
               font: font,
               color: '222222',
+              bold: true,
             }),
           ],
         })
@@ -268,7 +275,8 @@ function generateDefaultDocx(originalData: CVInput, enhancedData: CVEnhancedData
   if (originalData.education && originalData.education.length > 0) {
     children.push(createSectionTitle('Education', font, accentColor, AlignmentType.CENTER));
     for (const edu of originalData.education) {
-      const degreeText = [edu.degree, edu.field].filter(Boolean).join(' in ');
+      const degreeText = [edu.degree, edu.field].filter(Boolean).join(': ').toUpperCase();
+      const dateText = edu.endDate ? `${edu.startDate}/${edu.endDate}` : edu.startDate;
       children.push(
         new Paragraph({
           tabStops: [
@@ -287,7 +295,7 @@ function generateDefaultDocx(originalData: CVInput, enhancedData: CVEnhancedData
               color: '111111',
             }),
             new TextRun({
-              text: `\t${edu.startDate} to ${edu.endDate || 'Present'}`,
+              text: `\t${dateText}`,
               bold: true,
               size: 22,
               font: font,
@@ -353,7 +361,7 @@ function generateDefaultDocx(originalData: CVInput, enhancedData: CVEnhancedData
       children.push(
         new Paragraph({
           spacing: { before: 0, after: 0, line: 240 },
-          indent: { left: 360, firstLine: -180 },
+          indent: { left: 360, hanging: 180 },
           children: [
             new TextRun({
               text: '●  ',
@@ -362,7 +370,7 @@ function generateDefaultDocx(originalData: CVInput, enhancedData: CVEnhancedData
               color: '111111',
             }),
             new TextRun({
-              text: `${cert.name} - ${cert.issuer} (${cert.date})`,
+              text: `${cert.name}${cert.issuer ? `. ${cert.issuer}` : ''}`,
               size: 21,
               font: font,
               color: '222222',
@@ -534,7 +542,7 @@ function generateExecutiveDocx(originalData: CVInput, enhancedData: CVEnhancedDa
           children.push(
             new Paragraph({
               spacing: { before: 0, after: 0, line: 240 },
-              indent: { left: 240, firstLine: -120 },
+              indent: { left: 240, hanging: 120 },
               children: [
                 new TextRun({
                   text: '•  ',
@@ -790,7 +798,7 @@ function generateNovaDocx(originalData: CVInput, enhancedData: CVEnhancedData): 
           children.push(
             new Paragraph({
               spacing: { before: 0, after: 0, line: 240 },
-              indent: { left: 240, firstLine: -120 },
+              indent: { left: 240, hanging: 120 },
               children: [
                 new TextRun({
                   text: '•  ',

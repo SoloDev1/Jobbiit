@@ -111,12 +111,13 @@ const rawStyles = {
   chronicleSkillsText: { fontSize: 9, color: '#333333' },
   chronicleSkillsRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 3 },
 
-  // DEFAULT — Adebayo Ajayi Style (Ruled centered blue dividers, single-column)
+  // DEFAULT — John Doe Style (Ruled centered blue dividers, single-column)
   defaultPage: { padding: 40, fontSize: 9.5, color: '#111111', fontFamily: 'Helvetica', lineHeight: 1.45 },
-  defaultHeader: { alignItems: 'center', marginBottom: 8, width: '100%' },
-  defaultName: { fontSize: 24, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
-  defaultContactRow: { fontSize: 8.5, color: '#111111', marginVertical: 3, textAlign: 'center', fontFamily: 'Helvetica' },
-  defaultRule: { height: 1.0, backgroundColor: '#0066cc', width: '100%', marginVertical: 4 },
+  defaultHeader: { flexDirection: 'column', alignItems: 'center', marginBottom: 14, width: '100%' },
+  defaultNameWrap: { width: '100%', alignItems: 'center', marginBottom: 10, paddingBottom: 2 },
+  defaultName: { fontSize: 24, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center', lineHeight: 1.2 },
+  defaultContactRow: { fontSize: 8.5, color: '#111111', textAlign: 'center', fontFamily: 'Helvetica', paddingVertical: 6, lineHeight: 1.4 },
+  defaultRule: { height: 1.5, minHeight: 1.5, backgroundColor: '#0066cc', width: '100%', marginBottom: 8 },
   defaultSectionHeaderContainer: { marginTop: 16, marginBottom: 8, width: '100%' },
   defaultSectionTitleLine: { width: '100%', height: 1.0, backgroundColor: '#0066cc' },
   defaultSectionTitleText: { fontSize: 13, fontFamily: 'Helvetica-Bold', color: '#0066cc', textAlign: 'center', marginBottom: 3 },
@@ -171,6 +172,7 @@ export const CVPdfTemplate: React.FC<CVTemplateProps> = ({ originalData, enhance
     borderSkillBadge: { ...rawStyles.borderSkillBadge, backgroundColor: accentColor },
     monoSectionTitle: { ...rawStyles.monoSectionTitle, color: accentColor, borderBottomColor: accentColor },
     defaultName: { ...rawStyles.defaultName, color: accentColor },
+    defaultRule: { ...rawStyles.defaultRule, backgroundColor: accentColor },
     defaultSectionTitleText: { ...rawStyles.defaultSectionTitleText, color: accentColor },
     defaultSectionTitleLine: { ...rawStyles.defaultSectionTitleLine, backgroundColor: accentColor },
   };
@@ -649,18 +651,22 @@ export const CVPdfTemplate: React.FC<CVTemplateProps> = ({ originalData, enhance
     );
   }
 
-  // ───────────────── DEFAULT FALLBACK (Adebayo Ajayi layout design) ─────────────────
-  const contactText = [originalData.email, originalData.phone, originalData.location].filter(Boolean).join('  |  ');
+  // ───────────────── DEFAULT FALLBACK (John Doe layout design) ─────────────────
+  const contactText = [originalData.location, originalData.phone, originalData.email].filter(Boolean).join('  |  ');
   const half = Math.ceil((enhancedData.skills || []).length / 2);
   const skillsCol1 = (enhancedData.skills || []).slice(0, half);
   const skillsCol2 = (enhancedData.skills || []).slice(half);
+  const projects = (originalData as any).projects || [];
+  const certifications = (originalData as any).certifications || [];
 
   return (
     <Document>
       <Page size="A4" style={styles.defaultPage}>
         {/* Header */}
         <View style={styles.defaultHeader}>
-          <Text style={styles.defaultName}>{originalData.fullName}</Text>
+          <View style={styles.defaultNameWrap}>
+            <Text style={styles.defaultName}>{originalData.fullName}</Text>
+          </View>
           <View style={styles.defaultRule} />
           {contactText ? <Text style={styles.defaultContactRow}>{contactText}</Text> : null}
           <View style={styles.defaultRule} />
@@ -737,6 +743,22 @@ export const CVPdfTemplate: React.FC<CVTemplateProps> = ({ originalData, enhance
           </View>
         )}
 
+        {/* Accomplishments Section */}
+        {projects && projects.length > 0 && (
+          <View>
+            <View style={styles.defaultSectionHeaderContainer}>
+              <Text style={styles.defaultSectionTitleText}>Accomplishments</Text>
+              <View style={styles.defaultSectionTitleLine} />
+            </View>
+            {projects.map((p: any, idx: number) => (
+              <View key={idx} style={styles.defaultBulletRow}>
+                <Text style={styles.defaultBulletPoint}>•</Text>
+                <Text style={styles.defaultBulletText}>{p.name || p}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* Education Section */}
         {originalData.education && originalData.education.length > 0 && (
           <View>
@@ -748,9 +770,11 @@ export const CVPdfTemplate: React.FC<CVTemplateProps> = ({ originalData, enhance
               <View key={idx} style={styles.defaultEntry}>
                 <View style={styles.defaultEntryHeader}>
                   <Text style={styles.defaultEntryTitle}>
-                    {[edu.degree, edu.field].filter(Boolean).join(': ')}
+                    {[edu.degree, edu.field].filter(Boolean).join(': ').toUpperCase()}
                   </Text>
-                  <Text style={styles.defaultEntryDate}>{edu.startDate} – {edu.endDate || 'Present'}</Text>
+                  <Text style={styles.defaultEntryDate}>
+                    {edu.startDate}{edu.endDate ? `/${edu.endDate}` : ''}
+                  </Text>
                 </View>
                 <View style={styles.defaultEntrySubHeader}>
                   <Text style={styles.defaultEntryCompany}>{edu.school}</Text>
@@ -771,6 +795,24 @@ export const CVPdfTemplate: React.FC<CVTemplateProps> = ({ originalData, enhance
             REFERENCES - AVAILABLE ON REQUEST
           </Text>
         </View>
+
+        {/* Certifications Section */}
+        {certifications && certifications.length > 0 && (
+          <View>
+            <View style={styles.defaultSectionHeaderContainer}>
+              <Text style={styles.defaultSectionTitleText}>Certifications</Text>
+              <View style={styles.defaultSectionTitleLine} />
+            </View>
+            {certifications.map((cert: any, idx: number) => (
+              <View key={idx} style={styles.defaultBulletRow}>
+                <Text style={styles.defaultBulletPoint}>•</Text>
+                <Text style={styles.defaultBulletText}>
+                  {cert.name}{cert.issuer ? `. ${cert.issuer}` : ''}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </Page>
     </Document>
   );
