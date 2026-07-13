@@ -938,3 +938,22 @@ enum MessageRole {
   ASSISTANT
   SYSTEM
 }
+
+model DocumentTemplate {
+  id           String   @id @default(uuid())
+  title        String
+  description  String
+  type         String   // "cv", "cover_letter", "grant", "scholarship"
+  style        String   // maps to backend PDF layout branch
+  category     String   // "corporate", "modern", "simple", "creative"
+  accent       String   @default("#0066cc")
+  bestFor      String?
+  features     String[]
+  prefill      Json?
+  thumbnailUrl String?
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

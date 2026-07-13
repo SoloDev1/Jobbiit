@@ -38,6 +38,7 @@ import reportRoutes           from './routes/report.routes'
 import adminRoutes            from './routes/admin.routes'
 import documentRoutes         from './modules/document-generator/document-generator.routes'
 import chatbotRoutes          from './modules/chatbot/chatbot.routes'
+import templateRoutes         from './routes/template.routes'
 import { initWorker, registerCronJobs } from './modules/document-generator/document-generator.queue'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -149,6 +150,7 @@ app.use('/api/reports', reportRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/documents', documentRoutes)
 app.use('/api/chatbot', chatbotRoutes)
+app.use('/api/templates', templateRoutes)
 
 // Stub routers for features not yet implemented.
 // Each returns 501 so routes are discoverable and testable from day one.
