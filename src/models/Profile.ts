@@ -203,3 +203,22 @@ export async function updateBannerUrl(userId: string, bannerUrl: string): Promis
   })
   return row
 }
+
+export async function updateProfileCv(
+  userId: string,
+  cvUrl: string,
+  cvKey: string,
+  cvName: string,
+  cvText: string,
+): Promise<PublicProfile | null> {
+  const exists = await prisma.profile.findUnique({ where: { userId }, select: { id: true } })
+  if (!exists) return null
+
+  const profile = await prisma.profile.update({
+    where:  { userId },
+    data:   { cvUrl, cvKey, cvName, cvText },
+    include: fullInclude,
+  })
+  return mapProfile(profile)
+}
+

@@ -11,6 +11,8 @@ import {
 import * as ProfileModel from '../models/Profile'
 import * as UploadService from '../services/upload.service'
 import * as CvParserService from '../services/cvParser.service'
+import { prisma } from '../config/db'
+import { uploadDocument, deleteDocument } from '../modules/document-generator/services/storage.service'
 import type {
   CreateProfileInput,
   UpdateProfileInput,
@@ -262,11 +264,40 @@ export async function uploadAndParseCv(req: Request, res: Response): Promise<voi
       return
     }
 
-    // 2. Format with OpenAI structured output
+    // Delete existing CV from R2 if one was previously uploaded
+    const existing = await prisma.profile.findUnique({
+      where: { userId: userId(req) },
+      select: { cvKey: true },
+    })
+    if (existing?.cvKey) {
+      try {
+        await deleteDocument(existing.cvKey)
+      } catch (delErr) {
+        logger.error({ delErr, cvKey: existing.cvKey }, 'Failed to delete old CV from R2')
+      }
+    }
+
+    // 2. Upload original CV to Cloudflare R2
+    const fileExt = file.originalname.split('.').pop() || 'pdf'
+    const cvKey = `cvs/${userId(req)}-${randomUUID()}.${fileExt}`
+    const cvUrl = await uploadDocument(file.buffer, cvKey, file.mimetype)
+
+    // 3. Save CV info to Profile
+    await ProfileModel.updateProfileCv(userId(req), cvUrl, cvKey, file.originalname, rawText)
+
+    // 4. Format with OpenAI structured output
     const structuredData = await CvParserService.parseResumeText(rawText)
 
-    // 3. Return JSON response to client
-    sendSuccess(res, structuredData, 'CV parsed successfully')
+    // 5. Return JSON response to client (including cvUrl & cvName)
+    sendSuccess(
+      res,
+      {
+        ...structuredData,
+        cvUrl,
+        cvName: file.originalname,
+      },
+      'CV parsed and saved successfully',
+    )
   } catch (err: any) {
     logger.error({ err, userId: userId(req) }, 'CV parsing failed')
     sendError(res, err.message || 'Error processing CV file', 500, 'PARSING_ERROR')

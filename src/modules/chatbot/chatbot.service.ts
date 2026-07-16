@@ -206,7 +206,7 @@ async function loadGroundedContext(userId: string, mode: string): Promise<string
 
       if (!profile) return 'No user profile exists. Advise the user to fill out their profile details first.';
 
-      return `User Background Profile:
+      let profileText = `User Background Profile:
 Name: ${profile.firstName} ${profile.lastName}
 Headline: ${profile.headline || 'None'}
 Bio: ${profile.bio || 'None'}
@@ -219,6 +219,12 @@ Educations:
 ${profile.educations
   .map((ed) => `- ${ed.school}: ${ed.degree || ''} in ${ed.field || ''}`)
   .join('\n')}`;
+
+      if (mode === 'CV_REVIEW' && profile.cvText) {
+        profileText = `${profileText}\n\n--- EXACT UPLOADED CV TEXT (HIGH FIDELITY DETAILS) ---\n${profile.cvText}\n------------------------------------------------------`;
+      }
+
+      return profileText;
     }
 
     // 2. Job Matcher Grounding

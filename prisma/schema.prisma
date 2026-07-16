@@ -331,6 +331,12 @@ model Profile {
   phone     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  // CV Upload fields
+  cvUrl     String?
+  cvKey     String?
+  cvName    String?
+  cvText    String?
 
   experiences Experience[]
   educations  Education[]
