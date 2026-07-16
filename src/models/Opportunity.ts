@@ -373,6 +373,29 @@ export async function rejectOpportunity(
 }
 
 
+export async function getSavedOpportunities(
+  userId: string,
+): Promise<{ savedAt: Date; opportunity: OpportunityDetail }[]> {
+  const rows = await prisma.savedOpportunity.findMany({
+    where:   { userId },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      opportunity: {
+        include: viewerIncludes(userId),
+      },
+    },
+  })
+
+  return rows.map((r) => ({
+    savedAt: r.createdAt,
+    opportunity: mapRow(
+      r.opportunity as unknown as Parameters<typeof mapRow>[0],
+      userId,
+    ) as unknown as OpportunityDetail,
+  }))
+}
+
+
 export async function adminListOpportunities(
   cursor?: string,
   limit = 50,

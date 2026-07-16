@@ -94,6 +94,13 @@ export async function toggleSave(req: Request, res: Response): Promise<void> {
   sendSuccess(res, result, result.saved ? 'Opportunity saved' : 'Opportunity unsaved')
 }
 
+// ─── getSavedOpportunities ───────────────────────────────────────────────────
+
+export async function getSavedOpportunities(req: Request, res: Response): Promise<void> {
+  const saved = await OppModel.getSavedOpportunities(userId(req))
+  sendSuccess(res, saved, 'Saved opportunities loaded')
+}
+
 // ─── applyToOpportunity ───────────────────────────────────────────────────────
 
 export async function applyToOpportunity(req: Request, res: Response): Promise<void> {

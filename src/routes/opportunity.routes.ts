@@ -13,12 +13,11 @@ import * as OppController from '../controllers/opportunity.controller'
 const router = Router()
 
 router.use(authenticate)
-
 // ─── Public-facing (any authenticated user) ───────────────────────────────────
 // Static / prefix paths first to avoid /:id capture.
 router.get('/recommended',   OppController.getRecommended)
+router.get('/saved',         OppController.getSavedOpportunities)
 router.post('/save/:id',     OppController.toggleSave)
-
 router.get('/',  OppController.getOpportunities)
 router.get('/:id', OppController.getOpportunityById)
 router.post('/:id/apply', validate(applyOpportunitySchema), OppController.applyToOpportunity)
