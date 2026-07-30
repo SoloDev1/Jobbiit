@@ -149,6 +149,8 @@ app.use('/api/push', pushRoutes)
 app.use('/api/reports', reportRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/documents', documentRoutes)
+app.use('/api/v1/documents', documentRoutes)
+app.use('/api/v1/cv', documentRoutes)
 app.use('/api/chatbot', chatbotRoutes)
 app.use('/api/templates', templateRoutes)
 
