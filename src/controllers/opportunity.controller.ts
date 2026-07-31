@@ -10,6 +10,7 @@ import {
 import * as OppModel from '../models/Opportunity'
 import * as OppInteractions from '../models/opportunity-interactions.model'
 import * as notificationService from '../services/notification.service'
+import { OpportunityIntelligenceService } from '../services/opportunityIntelligence.service'
 import { audit } from '../models/AuditLog'
 import {
   opportunitiesQuerySchema,
@@ -337,4 +338,50 @@ export async function deleteOpportunityComment(req: Request, res: Response): Pro
 
   logger.info({ userId: userId(req), opportunityId: idParsed.data, commentId: commentIdParsed.data }, 'Opportunity comment deleted')
   sendNoContent(res)
+}
+
+// ─── getOpportunityAnalysis ($0 Token Precomputed Insights) ──────────────────
+
+export async function getOpportunityAnalysis(req: Request, res: Response): Promise<void> {
+  const idParsed = uuidParam.safeParse(req.params.id)
+  if (!idParsed.success) {
+    sendError(res, 'Invalid opportunity id', 400, 'INVALID_ID')
+    return
+  }
+
+  try {
+    const analysis = await OpportunityIntelligenceService.getOpportunityAnalysis(idParsed.data)
+    sendSuccess(res, analysis, 'Opportunity analysis loaded')
+  } catch (err: any) {
+    sendError(res, err.message || 'Failed to load opportunity analysis', 500, 'ANALYSIS_ERROR')
+  }
+}
+
+// ─── confirmApplicationStatus (Application Journey Manager 1-Tap) ───────────
+
+export async function confirmApplicationStatus(req: Request, res: Response): Promise<void> {
+  const idParsed = uuidParam.safeParse(req.params.id)
+  if (!idParsed.success) {
+    sendError(res, 'Invalid opportunity id', 400, 'INVALID_ID')
+    return
+  }
+
+  const { status } = req.body
+  try {
+    const { PrismaClient } = await import('@prisma/client')
+    const prisma = new PrismaClient()
+    const appRecord = await prisma.opportunityApplication.updateMany({
+      where: {
+        opportunityId: idParsed.data,
+        userId: userId(req),
+      },
+      data: {
+        status: status || 'APPLIED',
+        confirmedAppliedAt: new Date(),
+      },
+    })
+    sendSuccess(res, appRecord, 'Application status updated')
+  } catch (err: any) {
+    sendError(res, err.message || 'Failed to update application status', 500, 'STATUS_UPDATE_ERROR')
+  }
 }

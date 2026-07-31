@@ -20,6 +20,8 @@ router.get('/saved',         OppController.getSavedOpportunities)
 router.post('/save/:id',     OppController.toggleSave)
 router.get('/',  OppController.getOpportunities)
 router.get('/:id', OppController.getOpportunityById)
+router.get('/:id/analysis', OppController.getOpportunityAnalysis)
+router.post('/:id/confirm-status', OppController.confirmApplicationStatus)
 router.post('/:id/apply', validate(applyOpportunitySchema), OppController.applyToOpportunity)
 
 // ─── Admin / Moderator ────────────────────────────────────────────────────────
