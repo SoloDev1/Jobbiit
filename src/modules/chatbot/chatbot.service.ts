@@ -76,30 +76,53 @@ export async function handleChatbotTurn(
 
   logger.info({ sessionId, mode: currentMode, model }, 'Invoking OpenAI Chat Completion');
 
-  const completion = await openai.chat.completions.create({
-    model,
-    messages: finalMessages,
-    temperature: currentMode === 'INTERVIEW_COACH' ? 0.6 : 0.3,
-    max_tokens: 1000,
-  });
+  let rawContent = '';
+  let parsedPayload: {
+    message: string;
+    document?: {
+      type: string;
+      title: string;
+      content: string;
+      editable: boolean;
+      templateSkin?: string;
+    };
+    actions?: Array<{ id: string; type: string; label: string; payload?: any }>;
+  } = { message: '' };
 
-  const botResponse = completion.choices[0]?.message?.content || "I'm sorry, I encountered an issue processing your request.";
+  try {
+    const completion = await openai.chat.completions.create({
+      model,
+      messages: finalMessages,
+      temperature: currentMode === 'INTERVIEW_COACH' ? 0.6 : 0.3,
+      max_tokens: 1500,
+      response_format: { type: 'json_object' },
+    });
+
+    rawContent = completion.choices[0]?.message?.content || '{}';
+    parsedPayload = JSON.parse(rawContent);
+  } catch (err) {
+    logger.warn({ err, sessionId }, 'JSON parse error or API failure, falling back to raw response text');
+    parsedPayload = { message: rawContent || "I'm sorry, I encountered an issue processing your request." };
+  }
+
+  const messageText = parsedPayload.message || (typeof parsedPayload === 'string' ? parsedPayload : JSON.stringify(parsedPayload));
 
   // 7. Persist bot response asynchronously to PostgreSQL
   prisma.chatMessage.create({
     data: {
       sessionId,
       sender: 'ASSISTANT',
-      content: botResponse,
+      content: JSON.stringify(parsedPayload),
     },
   }).catch((err) => logger.error({ err, sessionId }, 'Failed to persist assistant chat message'));
 
   // 8. Update Redis memory cache (append the user and assistant turns)
-  history.push({ role: 'assistant', content: botResponse });
+  history.push({ role: 'assistant', content: messageText });
   await cacheHistory(sessionId, history);
 
-  return botResponse;
+  return parsedPayload as any;
 }
+
 
 // ─── UTILS & HELPERS ──────────────────────────────────────────────────────────
 
@@ -302,9 +325,24 @@ ${mentors
  */
 function getSystemPromptForMode(mode: string, context: string): string {
   const baseInstructions = `You are OpporLink's Career & Opportunity Assistant. You are friendly, professional, and clear.
-Keep your answers actionable, structuring long blocks with bullet points.
-If database records are present in the context, refer to them explicitly (including their titles/organisations). Do not make up opportunities if the database is empty.
-Never reference technical identifiers like Database IDs or JSON structures to the user.`;
+CRITICAL RESPONSE CONTRACT:
+You MUST ALWAYS return a JSON object with this exact structure:
+{
+  "message": "Conversational reply text to display to the user in chat.",
+  "document": { // Include ONLY if generating, drafting, or rewriting a document/artifact (CV, cover letter, SOP, grant, proposal, etc.)
+    "type": "CV" | "COVER_LETTER" | "RESUME" | "SOP" | "GRANT" | "PROPOSAL" | "BUSINESS_PLAN" | "EMAIL" | "REPORT" | "LETTER" | "ARTICLE" | "BLOG" | "ESSAY" | "CUSTOM",
+    "title": "Title of Document",
+    "content": "Full markdown text of the generated document",
+    "editable": true
+  },
+  "actions": [
+    { "id": "act-studio", "type": "OPEN_STUDIO", "label": "Open in AI Studio" },
+    { "id": "act-copy", "type": "COPY", "label": "Copy" }
+  ]
+}
+If a document is created in the turn, ALWAYS populate the "document" object and include "OPEN_STUDIO" action in the "actions" array.
+If database records are present in the context, refer to them explicitly (including their titles/organisations). Do not make up opportunities if the database is empty.`;
+
 
   switch (mode) {
     case 'CV_REVIEW':

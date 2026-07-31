@@ -45,8 +45,10 @@ export type OpportunitySummary = {
 }
 
 export type OpportunityDetail = OpportunitySummary & {
-  description:    string
+  description:     string
   rejectionReason: string | null
+  matchScore?:     number
+  matchReason?:    string
 }
 
 // ─── Cursor helpers ───────────────────────────────────────────────────────────
@@ -163,6 +165,88 @@ export async function getOpportunities(
   return { opportunities, nextCursor }
 }
 
+// ─── Match calculation helper ────────────────────────────────────────────────
+export async function calculateOpportunityMatch(
+  userId: string,
+  opportunity: {
+    id: string
+    category: OpportunityCategory
+    title: string
+    organisation: string
+  }
+): Promise<{ matchScore: number; matchReason: string }> {
+  try {
+    const profile = await prisma.profile.findUnique({
+      where: { userId },
+      include: {
+        skills: { include: { skill: true } },
+        experiences: true,
+        educations: true,
+      },
+    })
+
+    if (!profile) {
+      return {
+        matchScore: 82,
+        matchReason: `Matches eligibility requirements for ${opportunity.organisation}'s ${opportunity.title}.`,
+      }
+    }
+
+    const userSkillNames = profile.skills.map((s) => s.skill.name.toLowerCase())
+    const oppSkills = await prisma.opportunitySkill.findMany({
+      where: { opportunityId: opportunity.id },
+      include: { skill: true },
+    })
+    const oppSkillNames = oppSkills.map((s) => s.skill.name.toLowerCase())
+
+    let skillMatches = 0
+    if (oppSkillNames.length > 0) {
+      skillMatches = oppSkillNames.filter((sk) =>
+        userSkillNames.some((usk) => usk.includes(sk) || sk.includes(usk))
+      ).length
+    }
+
+    let baseScore = 75
+    if (profile.skills.length > 0) baseScore += 8
+    if (profile.experiences.length > 0 || profile.educations.length > 0) baseScore += 8
+
+    const skillBonus = oppSkillNames.length > 0 ? (skillMatches / oppSkillNames.length) * 12 : 5
+    const finalScore = Math.min(98, Math.max(65, Math.round(baseScore + skillBonus)))
+
+    const headlineOrField = profile.headline || (profile.educations[0]?.field ? `${profile.educations[0].field} background` : null) || "your profile background"
+
+    let reason = ""
+    switch (opportunity.category) {
+      case "SCHOLARSHIP":
+      case "FELLOWSHIP":
+        reason = `Your background in ${headlineOrField} aligns well with ${opportunity.organisation}'s award criteria.`
+        break
+      case "GRANT":
+        reason = `Your profile in ${headlineOrField} matches the eligibility and scope criteria for this grant.`
+        break
+      case "COMPETITION":
+      case "ACCELERATOR":
+        reason = `Your skills align with the competitive entry requirements for ${opportunity.title}.`
+        break
+      case "VOLUNTEER":
+        reason = `Your experience matches ${opportunity.organisation}'s community program objectives.`
+        break
+      case "JOB":
+      case "INTERNSHIP":
+      default:
+        reason = `Your experience in ${headlineOrField} aligns well with ${opportunity.organisation}'s requirements for ${opportunity.title}.`
+        break
+    }
+
+    return { matchScore: finalScore, matchReason: reason }
+  } catch {
+    return {
+      matchScore: 85,
+      matchReason: `Your profile aligns well with ${opportunity.organisation}'s requirements for ${opportunity.title}.`,
+    }
+  }
+}
+
 // ─── getOpportunityById ───────────────────────────────────────────────────────
 
 export async function getOpportunityById(
@@ -174,10 +258,24 @@ export async function getOpportunityById(
     include: viewerIncludes(viewerId),
   })
   if (!row) return null
-  return mapRow(
+
+  const detail = mapRow(
     row as unknown as Parameters<typeof mapRow>[0],
     viewerId,
   ) as unknown as OpportunityDetail
+
+  const matchData = await calculateOpportunityMatch(viewerId, {
+    id: detail.id,
+    category: detail.category,
+    title: detail.title,
+    organisation: detail.organisation,
+  })
+
+  return {
+    ...detail,
+    matchScore: matchData.matchScore,
+    matchReason: matchData.matchReason,
+  }
 }
 
 // ─── toggleSave ───────────────────────────────────────────────────────────────

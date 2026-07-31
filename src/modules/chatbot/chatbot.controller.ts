@@ -129,12 +129,19 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     }
 
     // Process turn asynchronously using AI agent matching logic
-    const botResponse = await handleChatbotTurn(userId, session, sanitizedMessage);
+    const botPayload: any = await handleChatbotTurn(userId, session, sanitizedMessage);
+
+    const responseText = typeof botPayload === 'string'
+      ? botPayload
+      : botPayload?.message || JSON.stringify(botPayload);
 
     sendSuccess(res, {
-      response: botResponse,
+      response: responseText,
+      document: typeof botPayload === 'object' ? botPayload?.document : undefined,
+      actions: typeof botPayload === 'object' ? botPayload?.actions : undefined,
       mode: session.mode,
     }, 'Response generated successfully');
+
 
   } catch (error: any) {
     logger.error({ error, sessionId }, 'Error in chatbot turn processing');
