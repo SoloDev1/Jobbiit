@@ -263,6 +263,13 @@ model User {
   generatedDocuments  GeneratedDocument[]
   chatSessions        ChatSession[]
 
+  userMemory           UserMemory?
+  userPreference       UserPreference?
+  resumeDocuments      ResumeDocument[]
+  coverLetterDocuments CoverLetterDocument[]
+  tokenUsageLogs       TokenUsageLog[]
+  aiRecommendations    AIRecommendation[]
+
   @@index([email])
   @@index([role])
 }
@@ -644,6 +651,7 @@ model Opportunity {
   recommendations Recommendation[]
   events          UserEvent[]
   reports         Report[]
+  analysis        OpportunityAnalysis?
 
   @@index([posterId])
   @@index([status])
@@ -962,4 +970,152 @@ model DocumentTemplate {
   createdBy    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+// ─── AI CAREER OPERATING SYSTEM MODELS ────────────────────────────────────────
+
+model UserMemory {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topAchievements Json?    // Array of verified metric bullet points
+  targetRoles     String[] @default([])
+  targetIndustries String[] @default([])
+  skillsSummary   String[] @default([])
+  careerGoals     String?
+  salaryExpectation String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model UserPreference {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredTone    String   @default("EXECUTIVE") // EXECUTIVE, CONCISE, TECHNICAL, CREATIVE
+  resumeLength     String   @default("ONE_PAGE")  // ONE_PAGE, TWO_PAGES
+  activeTemplateId String?
+  autoTailorEnabled Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model ResumeDocument {
+  id               String            @id @default(uuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String            @default("Untitled Resume")
+  targetRole       String?
+  activeVersionId  String?
+  activeTemplateId String            @default("modern")
+  structuredJson   Json              // Structured JSON representation of CV
+  isMaster         Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  versions         DocumentVersion[]
+
+  @@index([userId])
+  @@index([userId, isMaster])
+}
+
+model CoverLetterDocument {
+  id               String            @id @default(uuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String            @default("Untitled Cover Letter")
+  targetCompany    String?
+  targetRole       String?
+  structuredJson   Json              // Structured JSON content (intro, body, conclusion)
+  activeVersionId  String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  versions         DocumentVersion[]
+
+  @@index([userId])
+}
+
+model DocumentVersion {
+  id              String               @id @default(uuid())
+  resumeId        String?
+  coverLetterId   String?
+  resume          ResumeDocument?      @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  coverLetter     CoverLetterDocument? @relation(fields: [coverLetterId], references: [id], onDelete: Cascade)
+  versionTag      String               // e.g. "v1.0", "v1.1", "Google-Tailored"
+  jsonSnapshot    Json
+  changeSummary   String?
+  parentVersionId String?
+  createdAt       DateTime             @default(now())
+
+  @@index([resumeId])
+  @@index([coverLetterId])
+  @@index([createdAt])
+}
+
+model WorkflowSpec {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  stepsJson   Json     // Array of step definitions for multi-agent execution
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TokenUsageLog {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  intent       String   // e.g. "RESUME_IMPROVE_SUMMARY", "COVER_LETTER_WRITE"
+  modelUsed    String   // e.g. "gpt-4o-mini", "gpt-4o"
+  promptTokens Int
+  completionTokens Int
+  totalTokens  Int
+  estimatedCostUsd Float
+  latencyMs    Int
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model AIRecommendation {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String   // "JOB_MATCH", "RESUME_OUTDATED", "SKILL_GAP", "CERTIFICATION"
+  title         String
+  description   String
+  actionRoute   String?
+  actionMetadata Json?
+  isDismissed   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, isDismissed])
+}
+
+model OpportunityAnalysis {
+  id                 String      @id @default(uuid())
+  opportunityId      String      @unique
+  opportunity        Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  summary            String
+  simpleExplanation  String
+  requiredSkills     String[]    @default([])
+  preferredSkills    String[]    @default([])
+  responsibilities   String[]    @default([])
+  benefits           String[]    @default([])
+  atsKeywords        String[]    @default([])
+  interviewQuestions String[]    @default([])
+  careerLevel        String?
+  generatedAt        DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@index([opportunityId])
 }
