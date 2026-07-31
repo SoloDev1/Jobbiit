@@ -11,6 +11,7 @@ import * as OppModel from '../models/Opportunity'
 import * as OppInteractions from '../models/opportunity-interactions.model'
 import * as notificationService from '../services/notification.service'
 import { OpportunityIntelligenceService } from '../services/opportunityIntelligence.service'
+import { prisma } from '../config/db'
 import { audit } from '../models/AuditLog'
 import {
   opportunitiesQuerySchema,
@@ -368,8 +369,6 @@ export async function confirmApplicationStatus(req: Request, res: Response): Pro
 
   const { status } = req.body
   try {
-    const { PrismaClient } = await import('@prisma/client')
-    const prisma = new PrismaClient()
     const appRecord = await prisma.opportunityApplication.updateMany({
       where: {
         opportunityId: idParsed.data,
