@@ -4,36 +4,38 @@
  */
 
 import { logger } from '../telemetry/logger.service';
+import { redisConnection } from '../../config/redis';
 
 export class RedisCacheService {
-  private inMemoryCache: Map<string, { value: string; expiresAt: number }> = new Map();
-
   /**
    * Sets a key with TTL in seconds.
    */
   public async set(key: string, value: any, ttlSeconds = 3600): Promise<void> {
-    const serialized = typeof value === 'string' ? value : JSON.stringify(value);
-    const expiresAt = Date.now() + ttlSeconds * 1000;
-    this.inMemoryCache.set(key, { value: serialized, expiresAt });
-    logger.info({ key, ttlSeconds }, '[Cache] Key set in cache');
+    try {
+      const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+      await redisConnection.set(key, serialized, 'EX', ttlSeconds);
+      logger.info({ key, ttlSeconds }, '[Cache] Key set in Redis cache');
+    } catch (error) {
+      logger.error({ error, key }, '[Cache] Failed to set key in Redis');
+    }
   }
 
   /**
    * Gets a value by key. Returns null if expired or missing.
    */
   public async get<T = any>(key: string): Promise<T | null> {
-    const cached = this.inMemoryCache.get(key);
-    if (!cached) return null;
-
-    if (Date.now() > cached.expiresAt) {
-      this.inMemoryCache.delete(key);
-      return null;
-    }
-
     try {
-      return JSON.parse(cached.value) as T;
-    } catch {
-      return cached.value as unknown as T;
+      const cached = await redisConnection.get(key);
+      if (!cached) return null;
+
+      try {
+        return JSON.parse(cached) as T;
+      } catch {
+        return cached as unknown as T;
+      }
+    } catch (error) {
+      logger.error({ error, key }, '[Cache] Failed to get key from Redis');
+      return null;
     }
   }
 
@@ -41,8 +43,14 @@ export class RedisCacheService {
    * Invalidates a cache key.
    */
   public async del(key: string): Promise<void> {
-    this.inMemoryCache.delete(key);
+    try {
+      await redisConnection.del(key);
+      logger.info({ key }, '[Cache] Key invalidated in Redis cache');
+    } catch (error) {
+      logger.error({ error, key }, '[Cache] Failed to delete key from Redis');
+    }
   }
 }
 
 export const CacheEngine = new RedisCacheService();
+
