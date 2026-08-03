@@ -39,6 +39,13 @@ import adminRoutes            from './routes/admin.routes'
 import documentRoutes         from './modules/document-generator/document-generator.routes'
 import chatbotRoutes          from './modules/chatbot/chatbot.routes'
 import templateRoutes         from './routes/template.routes'
+import aiRoutes               from './routes/ai.routes'
+import { authenticate }       from './middleware/authenticate'
+import profileV2Routes        from './routes/profile-v2.routes'
+import documentV2Routes       from './routes/document-v2.routes'
+import workspaceV2Routes      from './routes/workspace-v2.routes'
+import interviewRoutes        from './routes/interview.routes'
+import analyticsRoutes        from './routes/analytics.routes'
 import { initWorker, registerCronJobs } from './modules/document-generator/document-generator.queue'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -153,6 +160,15 @@ app.use('/api/v1/documents', documentRoutes)
 app.use('/api/v1/cv', documentRoutes)
 app.use('/api/chatbot', chatbotRoutes)
 app.use('/api/templates', templateRoutes)
+app.use('/api/v1/ai', authenticate, aiRoutes)
+app.use('/api/ai', authenticate, aiRoutes)
+
+// ─── V2 API routes (resource-oriented) ─────────────────────────────────────
+app.use('/api/v2/profile',     authenticate, profileV2Routes)
+app.use('/api/v2/documents',   authenticate, documentV2Routes)
+app.use('/api/v2/workspaces',  authenticate, workspaceV2Routes)
+app.use('/api/v2/interview',   authenticate, interviewRoutes)
+app.use('/api/v2/analytics',   authenticate, analyticsRoutes)
 
 // Stub routers for features not yet implemented.
 // Each returns 501 so routes are discoverable and testable from day one.
@@ -287,13 +303,15 @@ async function start(): Promise<void> {
   })
 }
 
-void start().catch((startErr: unknown) => {
-  logger.fatal(
-    { err: startErr },
-    'Failed to start server — check DATABASE_URL, firewall, SSL (e.g. ?sslmode=require), and that PostgreSQL is running',
-  )
-  process.exit(1)
-})
+if (env.NODE_ENV !== 'test') {
+  void start().catch((startErr: unknown) => {
+    logger.fatal(
+      { err: startErr },
+      'Failed to start server — check DATABASE_URL, firewall, SSL (e.g. ?sslmode=require), and that PostgreSQL is running',
+    )
+    process.exit(1)
+  })
+}
 
 // Graceful shutdown — stop accepting new connections, drain existing ones,
 // then cleanly disconnect Prisma before exiting.

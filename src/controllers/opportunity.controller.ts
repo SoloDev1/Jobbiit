@@ -8,6 +8,7 @@ import {
   sendNoContent,
 } from '../utils/apiResponse'
 import * as OppModel from '../models/Opportunity'
+import { opportunityRepository } from '../repositories/opportunity.repository'
 import * as OppInteractions from '../models/opportunity-interactions.model'
 import * as notificationService from '../services/notification.service'
 import { OpportunityIntelligenceService } from '../services/opportunityIntelligence.service'
@@ -80,11 +81,7 @@ export async function toggleSave(req: Request, res: Response): Promise<void> {
     return
   }
 
-  const result = await OppModel.toggleSave(userId(req), parsed.data)
-  if (result === 'not_found') {
-    sendError(res, 'Opportunity not found', 404, 'NOT_FOUND')
-    return
-  }
+  const result = await opportunityRepository.toggleSave(userId(req), parsed.data)
 
   if (result.saved) {
     await audit(req, 'OPPORTUNITY_SAVED', {
@@ -99,7 +96,7 @@ export async function toggleSave(req: Request, res: Response): Promise<void> {
 // ─── getSavedOpportunities ───────────────────────────────────────────────────
 
 export async function getSavedOpportunities(req: Request, res: Response): Promise<void> {
-  const saved = await OppModel.getSavedOpportunities(userId(req))
+  const saved = await opportunityRepository.findSavedByUserId(userId(req))
   sendSuccess(res, saved, 'Saved opportunities loaded')
 }
 

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { authenticate } from '../../middleware/authenticate';
 import * as Controller from './document-generator.controller';
 import * as AiCvController from './controllers/ai-cv.controller';
@@ -16,7 +16,7 @@ router.use(authenticate);
 const docGenerationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   limit: 5,
-  keyGenerator: (req) => req.user?.id || req.ip || '',
+  keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip ?? '') || '',
   message: {
     success: false,
     message: 'Rate limit exceeded. You can only generate 5 documents per hour.',

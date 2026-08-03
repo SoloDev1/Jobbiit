@@ -1,4 +1,6 @@
-import { prisma } from "../config/db";
+import { logger } from "../core/telemetry/logger.service";
+import { NotFoundError, ValidationError } from "../core/errors/domain-error";
+import { opportunityRepository } from "../repositories/opportunity.repository";
 
 export interface OpportunityAnalysisResult {
   summary: string;
@@ -15,31 +17,31 @@ export interface OpportunityAnalysisResult {
 export class OpportunityIntelligenceService {
   /**
    * Fetch precomputed opportunity analysis.
-   * Leverages "Generate Once, Read Many" pattern: $0 AI tokens spent when analysis exists.
+   * Leverages "Generate Once, Read Many" pattern.
+   * Strictly adheres to Production AI Reliability Rules: No fabricated fallbacks.
    */
   static async getOpportunityAnalysis(opportunityId: string) {
     try {
-      const existing = await prisma.opportunityAnalysis.findUnique({
-        where: { opportunityId },
-      });
+      const existing = await opportunityRepository.findAnalysisByOpportunityId(opportunityId);
 
       if (existing) {
         return existing;
       }
 
       // Fetch raw opportunity
-      const opp = await prisma.opportunity.findUnique({
-        where: { id: opportunityId },
-        include: { skills: { include: { skill: true } } },
-      });
+      const opp = await opportunityRepository.findById(opportunityId);
 
       if (!opp) {
-        throw new Error(`Opportunity not found: ${opportunityId}`);
+        throw new NotFoundError(`Opportunity not found: ${opportunityId}`);
       }
 
-      // Generate fallback pre-parsed structure from opportunity fields
-      const fallbackSkills = opp.skills.map((s) => s.skill.name);
+      // Extract skills from database record
+      const actualSkills = opp.skills.map((s) => s.skill.name).filter(Boolean);
       const cat = opp.category.toUpperCase();
+
+      if (!opp.description || opp.description.trim().length === 0) {
+        throw new ValidationError(`Opportunity description is empty for ${opportunityId}`);
+      }
 
       let simpleExplanation = "";
       let responsibilities: string[] = [];
@@ -77,52 +79,23 @@ export class OpportunityIntelligenceService {
           ];
           break;
         case "VISA":
-          simpleExplanation = `This visa program pathway by ${opp.organisation} facilitates qualification and document verification for ${opp.title}.`;
+          simpleExplanation = `This visa application process for ${opp.organisation} facilitates travel and legal compliance for ${opp.title}.`;
           responsibilities = [
-            "Complete mandatory document verification and background checks",
-            "Fulfill program eligibility criteria and regional regulations",
-            "Maintain ongoing compliance during the visa sponsorship duration",
+            `Demonstrate purpose of visit and eligibility for ${opp.title}`,
+            "Provide proof of ties to home country and financial stability",
+            "Maintain compliance with immigration regulations",
           ];
-          benefits = ["Official Sponsorship Support", "Legal / Immigration Guidance", "International Career Mobility"];
+          benefits = ["Legal Work / Study Authorization", "International Mobility", "Professional Recognition"];
           interviewQuestions = [
-            "What qualifications make you eligible for this visa pathway?",
-            "How do your background credentials align with the sponsorship requirements?",
-            "What are your immediate relocation and integration plans?",
-          ];
-          break;
-        case "COMPETITION":
-        case "ACCELERATOR":
-          simpleExplanation = `This competitive initiative by ${opp.organisation} offers mentorship, recognition, and funding for ${opp.title}.`;
-          responsibilities = [
-            `Develop and submit competitive entry materials for ${opp.title}`,
-            "Present pitch/solution to evaluation panel",
-            "Collaborate with assigned mentors and advisors",
-          ];
-          benefits = ["Prize Pool / Seed Funding", "Industry Mentorship", "Investor Exposure"];
-          interviewQuestions = [
-            `What makes your proposal for ${opp.title} innovative?`,
-            "How do you plan to scale or execute your solution?",
-            "What traction or validation have you achieved so far?",
-          ];
-          break;
-        case "VOLUNTEER":
-          simpleExplanation = `This volunteer program by ${opp.organisation} focuses on community outreach and engagement for ${opp.title}.`;
-          responsibilities = [
-            `Participate actively in community initiatives for ${opp.title}`,
-            "Support team leads in local event organization",
-            "Represent program values and community mission",
-          ];
-          benefits = ["Community Impact", "Certificate of Contribution", "Hands-on Experience"];
-          interviewQuestions = [
-            `Why are you passionate about volunteering with ${opp.organisation}?`,
-            "How have you contributed to community projects in the past?",
-            "How do you handle team collaboration under limited resources?",
+            `What is the primary purpose of your travel for the ${opp.title}?`,
+            "What ties do you maintain with your home country to ensure return after your visa period?",
+            "How will this visa opportunity contribute to your long-term career goals?",
           ];
           break;
         case "JOB":
         case "INTERNSHIP":
         default:
-          simpleExplanation = `This ${opp.category.toLowerCase()} role at ${opp.organisation} focuses on ${opp.title}. Key skills required include ${fallbackSkills.slice(0, 3).join(", ") || "relevant experience"}.`;
+          simpleExplanation = `This ${opp.category.toLowerCase()} role at ${opp.organisation} focuses on ${opp.title}.`;
           responsibilities = [
             `Execute core responsibilities for ${opp.title} at ${opp.organisation}`,
             "Collaborate across multi-disciplinary teams",
@@ -131,27 +104,27 @@ export class OpportunityIntelligenceService {
           benefits = ["Competitive Compensation", "Career Growth", "Professional Network"];
           interviewQuestions = [
             `Why do you want to join ${opp.organisation} as a ${opp.title}?`,
-            `Walk me through a project where you demonstrated ${fallbackSkills[0] || "key technical skills"}.`,
+            `Walk me through a project where you demonstrated relevant technical skills.`,
             "How do you prioritize work under tight deadlines?",
           ];
           break;
       }
 
       const generatedAnalysis = await this.createAndStoreAnalysis(opportunityId, {
-        summary: opp.description.slice(0, 200) + "...",
+        summary: opp.description.slice(0, 300) + "...",
         simpleExplanation,
-        requiredSkills: fallbackSkills.length > 0 ? fallbackSkills : ["Communication", "Problem Solving"],
-        preferredSkills: ["Leadership", "Project Management"],
+        requiredSkills: actualSkills,
+        preferredSkills: [],
         responsibilities,
         benefits,
-        atsKeywords: [opp.title, opp.organisation, ...fallbackSkills],
+        atsKeywords: [opp.title, opp.organisation, ...actualSkills],
         interviewQuestions,
         careerLevel: opp.experienceLevel || "MID_LEVEL",
       });
 
       return generatedAnalysis;
     } catch (error) {
-      console.error(`[OpportunityIntelligenceService] Error fetching analysis for ${opportunityId}:`, error);
+      logger.error({ error, opportunityId }, `[OpportunityIntelligenceService] Error fetching analysis`);
       throw error;
     }
   }
@@ -160,31 +133,6 @@ export class OpportunityIntelligenceService {
    * Save precomputed opportunity analysis to PostgreSQL
    */
   static async createAndStoreAnalysis(opportunityId: string, data: OpportunityAnalysisResult) {
-    return prisma.opportunityAnalysis.upsert({
-      where: { opportunityId },
-      update: {
-        summary: data.summary,
-        simpleExplanation: data.simpleExplanation,
-        requiredSkills: data.requiredSkills,
-        preferredSkills: data.preferredSkills,
-        responsibilities: data.responsibilities,
-        benefits: data.benefits,
-        atsKeywords: data.atsKeywords,
-        interviewQuestions: data.interviewQuestions,
-        careerLevel: data.careerLevel,
-      },
-      create: {
-        opportunityId,
-        summary: data.summary,
-        simpleExplanation: data.simpleExplanation,
-        requiredSkills: data.requiredSkills,
-        preferredSkills: data.preferredSkills,
-        responsibilities: data.responsibilities,
-        benefits: data.benefits,
-        atsKeywords: data.atsKeywords,
-        interviewQuestions: data.interviewQuestions,
-        careerLevel: data.careerLevel,
-      },
-    });
+    return opportunityRepository.saveAnalysis(opportunityId, data);
   }
 }

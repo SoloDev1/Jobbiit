@@ -262,6 +262,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   generatedDocuments  GeneratedDocument[]
   chatSessions        ChatSession[]
+  workspaces          Workspace[]
 
   userMemory           UserMemory?
   userPreference       UserPreference?
@@ -269,8 +270,9 @@ model User {
   coverLetterDocuments CoverLetterDocument[]
   tokenUsageLogs       TokenUsageLog[]
   aiRecommendations    AIRecommendation[]
+  interviewSessions    InterviewSession[]
+  flashcards           Flashcard[]
 
-  @@index([email])
   @@index([role])
 }
 
@@ -287,8 +289,6 @@ model PushToken {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([userId])
-  @@index([token])
 }
 
 // ─────────────────────────────────────────
@@ -305,7 +305,6 @@ model RefreshToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
-  @@index([token])
 }
 
 model PasswordResetToken {
@@ -348,8 +347,6 @@ model Profile {
   experiences Experience[]
   educations  Education[]
   skills      ProfileSkill[]
-
-  @@index([userId])
 }
 
 model Experience {
@@ -473,6 +470,7 @@ model Comment {
   reports Report[]
 
   @@index([postId])
+  @@index([authorId])
 }
 
 model Like {
@@ -644,7 +642,7 @@ model Opportunity {
 
   poster          User               @relation("OpportunityPoster",   fields: [posterId],     references: [id], onDelete: Cascade)
   reviewedBy      User?              @relation("OpportunityReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  source          OpportunitySource? @relation(fields: [sourceId],    references: [id])
+  source          OpportunitySource? @relation(fields: [sourceId],    references: [id], onDelete: SetNull)
   skills          OpportunitySkill[]
   savedBy         SavedOpportunity[]
   applications    OpportunityApplication[]
@@ -652,6 +650,8 @@ model Opportunity {
   events          UserEvent[]
   reports         Report[]
   analysis        OpportunityAnalysis?
+  interviewSessions InterviewSession[]
+  flashcards        Flashcard[]
 
   @@index([posterId])
   @@index([status])
@@ -727,6 +727,7 @@ model UserEvent {
 
   @@index([userId, type])
   @@index([createdAt])
+  @@index([opportunityId])
 }
 
 // ─────────────────────────────────────────
@@ -748,6 +749,7 @@ model Notification {
 
   @@index([recipientId])
   @@index([isRead])
+  @@index([triggerId])
 }
 
 // ─────────────────────────────────────────
@@ -775,6 +777,7 @@ model AuditLog {
   target User? @relation("AuditTarget", fields: [targetId], references: [id], onDelete: SetNull)
 
   @@index([actorId])
+  @@index([targetId])
   @@index([action])
   @@index([entityType])
   @@index([status])
@@ -876,6 +879,7 @@ model GeneratedDocument {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaces     WorkspaceDocument[]
   retryCount     Int            @default(0)
   errorMessage   String?
   lastAccessedAt DateTime?
@@ -890,8 +894,12 @@ model GeneratedDocument {
 
 enum DocumentType {
   CV
+  COVER_LETTER
   GRANT
   SCHOLARSHIP
+  SOP
+  VISA
+  PORTFOLIO
 }
 
 enum DocumentFormat {
@@ -987,8 +995,6 @@ model UserMemory {
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-
-  @@index([userId])
 }
 
 model UserPreference {
@@ -1001,8 +1007,6 @@ model UserPreference {
   autoTailorEnabled Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-
-  @@index([userId])
 }
 
 model ResumeDocument {
@@ -1116,6 +1120,108 @@ model OpportunityAnalysis {
   careerLevel        String?
   generatedAt        DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
+}
 
+enum WorkspaceStatus {
+  DRAFT
+  ANALYZING
+  READY
+  EDITING
+  TAILORING
+  REVIEWING
+  SUBMITTED
+  ARCHIVED
+}
+
+model Workspace {
+  id                 String              @id @default(uuid())
+  userId             String
+  title              String
+  status             WorkspaceStatus     @default(DRAFT)
+  opportunityContext Json?
+  intelligence       Json?
+  preferences        Json?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents          WorkspaceDocument[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model WorkspaceDocument {
+  id          String            @id @default(uuid())
+  workspaceId String
+  documentId  String
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  document    GeneratedDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, documentId])
+  @@index([documentId])
+}
+
+enum InterviewPersona {
+  FRIENDLY_HR
+  HIRING_MANAGER
+  TECHNICAL_LEAD
+  FAANG_INTERVIEWER
+  CEO_FOUNDER
+}
+
+model InterviewSession {
+  id            String             @id @default(uuid())
+  userId        String
+  opportunityId String?
+  persona       InterviewPersona   @default(HIRING_MANAGER)
+  difficulty    String             @default("INTERMEDIATE") // BEGINNER, INTERMEDIATE, ADVANCED
+  readinessScore Int               @default(75)
+  starScore     Int                @default(80)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity   Opportunity?       @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  feedbacks     InterviewFeedback[]
+
+  @@index([userId])
+  @@index([opportunityId])
+}
+
+model InterviewFeedback {
+  id            String           @id @default(uuid())
+  sessionId     String
+  session       InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionText  String
+  answerText    String
+  situationOk   Boolean          @default(true)
+  taskOk        Boolean          @default(true)
+  actionOk      Boolean          @default(false)
+  resultOk      Boolean          @default(false)
+  metricsFound  Boolean          @default(false)
+  score         Int              @default(70)
+  coachingTip   String
+  improvedAnswer String
+  createdAt     DateTime         @default(now())
+
+  @@index([sessionId])
+}
+
+model Flashcard {
+  id             String       @id @default(uuid())
+  userId         String
+  opportunityId  String?
+  question       String
+  expectedAnswer String
+  commonMistakes String[]     @default([])
+  strongKeywords String[]     @default([])
+  previousAnswer String?
+  improvedAnswer String?
+  createdAt      DateTime     @default(now())
+
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity    Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
   @@index([opportunityId])
 }

@@ -8,7 +8,7 @@ import {
   sendError,
   sendNoContent,
 } from '../utils/apiResponse'
-import * as ProfileModel from '../models/Profile'
+import { profileRepository } from '../repositories/profile.repository'
 import * as UploadService from '../services/upload.service'
 import * as CvParserService from '../services/cvParser.service'
 import { prisma } from '../config/db'
@@ -47,7 +47,7 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const profile = await ProfileModel.getProfileByUserId(parsed.data);
+  const profile = await profileRepository.findByUserId(parsed.data);
   if (!profile) {
     sendError(res, 'Profile not found', 404, 'NOT_FOUND');
     return;
@@ -61,13 +61,13 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
 export async function createProfile(req: Request, res: Response): Promise<void> {
   const data = req.body as CreateProfileInput
 
-  const existing = await ProfileModel.getProfileIdByUserId(userId(req))
+  const existing = await profileRepository.findIdByUserId(userId(req))
   if (existing) {
     sendError(res, 'Profile already exists', 409, 'CONFLICT')
     return
   }
 
-  const profile = await ProfileModel.createProfile(userId(req), data)
+  const profile = await profileRepository.create(userId(req), data)
   logger.info({ userId: userId(req), profileId: profile.id }, 'Profile created')
 
   sendCreated(res, profile, 'Profile created successfully')
@@ -78,7 +78,7 @@ export async function createProfile(req: Request, res: Response): Promise<void> 
 export async function updateProfile(req: Request, res: Response): Promise<void> {
   const data = req.body as UpdateProfileInput
 
-  const profile = await ProfileModel.updateProfile(userId(req), data)
+  const profile = await profileRepository.update(userId(req), data)
   if (!profile) {
     sendError(res, 'Profile not found', 404, 'NOT_FOUND')
     return
@@ -94,13 +94,13 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
 export async function addExperience(req: Request, res: Response): Promise<void> {
   const data = req.body as AddExperienceInput
 
-  const profileId = await ProfileModel.getProfileIdByUserId(userId(req))
+  const profileId = await profileRepository.findIdByUserId(userId(req))
   if (!profileId) {
     sendError(res, 'Profile not found', 404, 'NOT_FOUND')
     return
   }
 
-  const created = await ProfileModel.addExperience(profileId, data)
+  const created = await profileRepository.addExperience(profileId, data)
   sendCreated(res, created, 'Experience added')
 }
 
@@ -113,13 +113,13 @@ export async function deleteExperience(req: Request, res: Response): Promise<voi
     return
   }
 
-  const profileId = await ProfileModel.getProfileIdByUserId(userId(req))
+  const profileId = await profileRepository.findIdByUserId(userId(req))
   if (!profileId) {
     sendError(res, 'Profile not found', 404, 'NOT_FOUND')
     return
   }
 
-  const ok = await ProfileModel.deleteExperience(parsed.data, profileId)
+  const ok = await profileRepository.deleteExperience(parsed.data, profileId)
   if (!ok) {
     sendError(res, 'Experience not found', 404, 'NOT_FOUND')
     return
@@ -132,13 +132,13 @@ export async function deleteExperience(req: Request, res: Response): Promise<voi
 
 export async function addEducation(req: Request, res: Response): Promise<void> {
   try {
-    const profileId = await ProfileModel.getProfileIdByUserId(userId(req))
+    const profileId = await profileRepository.findIdByUserId(userId(req))
     if (!profileId) {
       sendError(res, 'Profile not found', 404, 'NOT_FOUND')
       return
     }
 
-    const created = await ProfileModel.addEducation(profileId, req.body as AddEducationInput)
+    const created = await profileRepository.addEducation(profileId, req.body as AddEducationInput)
     sendCreated(res, created, 'Education added')
   } catch (err) {
     sendError(res, 'Failed to add education', 500, 'INTERNAL_ERROR')
@@ -154,13 +154,13 @@ export async function deleteEducation(req: Request, res: Response): Promise<void
     return
   }
 
-  const profileId = await ProfileModel.getProfileIdByUserId(userId(req))
+  const profileId = await profileRepository.findIdByUserId(userId(req))
   if (!profileId) {
     sendError(res, 'Profile not found', 404, 'NOT_FOUND')
     return
   }
 
-  const ok = await ProfileModel.deleteEducation(parsed.data, profileId)
+  const ok = await profileRepository.deleteEducation(parsed.data, profileId)
   if (!ok) {
     sendError(res, 'Education not found', 404, 'NOT_FOUND')
     return
@@ -174,14 +174,14 @@ export async function deleteEducation(req: Request, res: Response): Promise<void
 export async function addSkills(req: Request, res: Response): Promise<void> {
   const { skills } = req.body as AddSkillsInput
 
-  const profileId = await ProfileModel.getProfileIdByUserId(userId(req))
+  const profileId = await profileRepository.findIdByUserId(userId(req))
   if (!profileId) {
     sendError(res, 'Profile not found', 404, 'NOT_FOUND')
     return
   }
 
-  await ProfileModel.addSkills(profileId, skills)
-  const profile = await ProfileModel.getProfileByUserId(userId(req))
+  await profileRepository.setSkills(profileId, skills)
+  const profile = await profileRepository.findByUserId(userId(req))
   if (!profile) {
     sendError(res, 'Profile not found', 404, 'NOT_FOUND')
     return
@@ -198,7 +198,7 @@ export async function uploadAvatar(req: Request, res: Response): Promise<void> {
     return
   }
 
-  if (!(await ProfileModel.getProfileIdByUserId(userId(req)))) {
+  if (!(await profileRepository.findIdByUserId(userId(req)))) {
     sendError(res, 'Profile not found', 404, 'NOT_FOUND')
     return
   }
@@ -211,7 +211,7 @@ export async function uploadAvatar(req: Request, res: Response): Promise<void> {
     file.mimetype,
   )
 
-  const updated = await ProfileModel.updateAvatarUrl(userId(req), url)
+  const updated = await profileRepository.updateAvatarUrl(userId(req), url)
 
   logger.info({ userId: userId(req) }, 'Avatar uploaded')
 
@@ -225,7 +225,7 @@ export async function uploadBanner(req: Request, res: Response): Promise<void> {
     return
   }
 
-  if (!(await ProfileModel.getProfileIdByUserId(userId(req)))) {
+  if (!(await profileRepository.findIdByUserId(userId(req)))) {
     sendError(res, 'Profile not found', 404, 'NOT_FOUND')
     return
   }
@@ -238,7 +238,7 @@ export async function uploadBanner(req: Request, res: Response): Promise<void> {
     file.mimetype,
   )
 
-  const updated = await ProfileModel.updateBannerUrl(userId(req), url)
+  const updated = await profileRepository.updateBannerUrl(userId(req), url)
 
   logger.info({ userId: userId(req) }, 'Banner uploaded')
 
@@ -283,7 +283,7 @@ export async function uploadAndParseCv(req: Request, res: Response): Promise<voi
     const cvUrl = await uploadDocument(file.buffer, cvKey, file.mimetype)
 
     // 3. Save CV info to Profile
-    await ProfileModel.updateProfileCv(userId(req), cvUrl, cvKey, file.originalname, rawText)
+    await profileRepository.updateCv(userId(req), cvUrl, cvKey, file.originalname, rawText)
 
     // 4. Format with OpenAI structured output
     const structuredData = await CvParserService.parseResumeText(rawText)
