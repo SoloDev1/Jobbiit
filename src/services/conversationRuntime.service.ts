@@ -47,7 +47,9 @@ export class ConversationRuntimeService {
       persona: session?.persona || 'TECHNICAL_LEAD',
     });
 
-    const activeQuestion = `Looking at ${triContext.opportunity.companyName}'s distributed systems stack, describe a time when you resolved a complex caching or latency challenge under tight deadlines.`;
+    const company = triContext.opportunity.companyName || 'Target Company';
+    const role = triContext.opportunity.roleTitle || 'Software Engineer';
+    const activeQuestion = `As part of the ${role} interview at ${company}, describe how you approach complex challenges in your field.`;
 
     // 1. Run Signal Evaluators
     const starRes = await starEvaluator.evaluate(
@@ -151,7 +153,7 @@ export class ConversationRuntimeService {
       },
       input.userAnswerText,
       starRes,
-      { competency: 'System Architecture', targetDepth: 2, currentDepth: 1, satisfied: false }
+      { competency: 'Core Problem Solving', targetDepth: 2, currentDepth: 1, satisfied: false }
     );
 
     const situationOk = starRes.detectedSignals.includes('Situation Defined');
@@ -160,7 +162,9 @@ export class ConversationRuntimeService {
     const resultOk = starRes.detectedSignals.includes('Outcome & Impact');
     const metricsFound = starRes.detectedSignals.includes('Quantifiable Metrics Found');
 
-    const improvedAnswer = `${input.userAnswerText.trim()} This initiative directly resulted in a 35% latency reduction and increased system throughput under peak traffic.`;
+    const improvedAnswer = metricsFound
+      ? input.userAnswerText.trim()
+      : `${input.userAnswerText.trim()} Specifically, this achieved a measurable efficiency gain and improved overall system performance.`;
 
     // Persist feedback turn to DB
     await interviewRepository.saveFeedback({
@@ -177,8 +181,9 @@ export class ConversationRuntimeService {
       improvedAnswer,
     });
 
-    const personaName = session?.persona || 'Alex (Tech Lead)';
-    const personaMessage = `That's a solid explanation. ${overall.summaryTip}`;
+    const personaMessage = overall.summaryTip
+      ? `Thank you for sharing. ${overall.summaryTip}`
+      : "Thank you for explaining your approach clearly.";
 
     return {
       personaMessage,

@@ -79,4 +79,41 @@ export class OpportunityCleanerService {
       estimatedTokens,
     };
   }
+
+  /**
+   * Sanitizes raw HTML description into clean human-readable plain text / markdown.
+   */
+  public static sanitizeDescription(rawDescription?: string | null): string {
+    if (!rawDescription) return '';
+
+    let text = rawDescription;
+    text = text
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n\n')
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<li[^>]*>/gi, '• ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+
+    const boilerplatePatterns = [
+      /Equal Opportunity Employer[\s\S]*$/i,
+      /All qualified applicants will receive consideration[\s\S]*$/i,
+      /Privacy Policy[\s\S]*$/i,
+    ];
+
+    for (const pattern of boilerplatePatterns) {
+      text = text.replace(pattern, '');
+    }
+
+    return text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join('\n\n');
+  }
 }

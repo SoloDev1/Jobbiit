@@ -13,6 +13,7 @@ import * as OppInteractions from '../models/opportunity-interactions.model'
 import * as notificationService from '../services/notification.service'
 import { OpportunityIntelligenceService } from '../services/opportunityIntelligence.service'
 import { CareerMemorySyncService } from '../services/careerMemorySync.service'
+import { OpportunityCleanerService } from '../services/opportunityCleaner'
 import { prisma } from '../config/db'
 import { audit } from '../models/AuditLog'
 import {
@@ -70,10 +71,15 @@ export async function getOpportunityById(req: Request, res: Response): Promise<v
     return
   }
 
+  const sanitizedOpp = {
+    ...opp,
+    description: OpportunityCleanerService.sanitizeDescription(opp.description),
+  };
+
   // Sync view event & career memory asynchronously
   CareerMemorySyncService.syncOpportunityInteraction(userId(req), parsed.data, 'VIEW_OPPORTUNITY');
 
-  sendSuccess(res, opp, 'Opportunity loaded')
+  sendSuccess(res, sanitizedOpp, 'Opportunity loaded')
 }
 
 // ─── toggleSave ───────────────────────────────────────────────────────────────

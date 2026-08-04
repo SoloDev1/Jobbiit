@@ -110,7 +110,32 @@ export async function createSession(req: Request, res: Response): Promise<void> 
     const userId = req.user?.id || req.body.userId;
     const input = interviewRequestFactoryService.createInputFromRequest(req.body, userId);
 
-    const session = await interviewRepository.createSession(input);
+    const session: any = await interviewRepository.createSession(input);
+
+    try {
+      const context = await interviewContextBuilderService.buildContext({
+        userId,
+        sourceType: input.sourceType,
+        opportunityId: input.opportunityId,
+        extractedCompany: input.extractedCompany,
+        extractedRole: input.extractedRole,
+      });
+
+      const triContext = await interviewContextBuilderService.buildTriModelContext({
+        userId,
+        sessionId: session.id,
+        sourceType: input.sourceType,
+        opportunityId: input.opportunityId,
+        companyName: input.extractedCompany || 'Target Company',
+        roleTitle: input.extractedRole || 'Software Engineer',
+        persona: input.persona,
+      });
+
+      const initialQuestion = await questionGeneratorService.generateQuestion(triContext);
+      session.initialQuestion = initialQuestion;
+    } catch (err: any) {
+      session.initialQuestion = `Welcome to your interview. To start, could you tell me about your background and recent relevant project experience?`;
+    }
 
     sendCreated(res, session, 'Interview session initialized');
   } catch (error: any) {

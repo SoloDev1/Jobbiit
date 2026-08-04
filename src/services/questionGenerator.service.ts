@@ -10,18 +10,24 @@ export class QuestionGeneratorService {
   public async generateQuestion(context: TriModelContext, topic = 'System Architecture'): Promise<string> {
     logger.info({ persona: context.interview.activePersona, company: context.opportunity.companyName, service: 'QuestionGeneratorService' }, 'Generating LLM Question');
 
-    const rawTemplate = promptRegistryService.get('FOLLOW_UP_PROBE', 'v1');
-    const prompt = rawTemplate
-      .replace('{{persona}}', context.interview.activePersona)
-      .replace('{{answer}}', topic);
+    const company = context.opportunity.companyName || 'Target Company';
+    const role = context.opportunity.roleTitle || 'Software Engineer';
+    const persona = context.interview.activePersona || 'TECHNICAL_LEAD';
+    const primarySkill = context.candidate.skills[0] || 'Software Engineering';
 
-    // Call provider-agnostic AI Gateway
-    const aiResult = await aiGatewayService.complete(prompt, { provider: 'GEMINI' });
+    const systemPrompt = `You are an interviewer with persona ${persona} conducting a professional job interview for the position of ${role} at ${company}. Generate one clear, engaging, realistic interview question focusing on ${topic} and candidate background in ${primarySkill}. Keep the question direct and conversational (1-2 sentences). Do not include introductory conversational fluff or quotation marks.`;
 
-    // Custom candidate skill binding
-    const primarySkill = context.candidate.skills[0] || 'Node.js & Caching';
+    try {
+      const aiResult = await aiGatewayService.complete(systemPrompt, { provider: 'GEMINI' });
+      const cleaned = aiResult?.trim()?.replace(/^["']|["']$/g, '');
+      if (cleaned && cleaned.length > 20) {
+        return cleaned;
+      }
+    } catch (err: any) {
+      logger.warn({ error: err.message }, 'AI Gateway call failed in QuestionGeneratorService, using dynamic persona template');
+    }
 
-    return `Looking at ${context.opportunity.companyName}'s engineering culture and your background in ${primarySkill}, describe a time when you resolved a complex technical disagreement or system bottleneck under tight deadlines.`;
+    return `Welcome to your interview for ${role} at ${company}. To begin, could you describe a challenging project where you utilized ${primarySkill} to solve a key technical or operational problem?`;
   }
 }
 
