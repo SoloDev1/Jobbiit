@@ -26,20 +26,28 @@ export class OpportunityIntelligenceService {
    */
   static async getOpportunityAnalysis(opportunityId: string): Promise<OpportunityAnalysisResult> {
     try {
-      // 1. Check legacy analysis record first
+      // 1. Check legacy analysis record first (Invalidate if it contains stale software developer fallback for non-tech roles)
       const existing = await opportunityRepository.findAnalysisByOpportunityId(opportunityId);
       if (existing) {
-        return {
-          summary: existing.summary,
-          simpleExplanation: existing.simpleExplanation,
-          requiredSkills: existing.requiredSkills,
-          preferredSkills: existing.preferredSkills,
-          responsibilities: existing.responsibilities,
-          benefits: existing.benefits,
-          atsKeywords: existing.atsKeywords,
-          interviewQuestions: existing.interviewQuestions,
-          careerLevel: existing.careerLevel || 'MID_LEVEL',
-        };
+        const oppCategory = existing.careerLevel ? '' : ''; // optional
+        const isStaleFallback =
+          existing.atsKeywords?.includes('TypeScript') &&
+          existing.atsKeywords?.includes('Docker') &&
+          !existing.summary?.toLowerCase().includes('typescript');
+
+        if (!isStaleFallback) {
+          return {
+            summary: existing.summary,
+            simpleExplanation: existing.simpleExplanation,
+            requiredSkills: existing.requiredSkills,
+            preferredSkills: existing.preferredSkills,
+            responsibilities: existing.responsibilities,
+            benefits: existing.benefits,
+            atsKeywords: existing.atsKeywords,
+            interviewQuestions: existing.interviewQuestions,
+            careerLevel: existing.careerLevel || 'MID_LEVEL',
+          };
+        }
       }
 
       // 2. Fetch raw opportunity
@@ -67,7 +75,15 @@ export class OpportunityIntelligenceService {
         attempts++;
         const response = await AIProviderAdapter.generateStructuredText(
           promptTemplate.systemPrompt,
-          userPrompt
+          userPrompt,
+          {
+            context: {
+              title: opp.title,
+              organisation: opp.organisation,
+              category: opp.category,
+              description: opp.description,
+            },
+          }
         );
 
         try {

@@ -121,18 +121,9 @@ export async function createSession(req: Request, res: Response): Promise<void> 
         extractedRole: input.extractedRole,
       });
 
-      const triContext = await interviewContextBuilderService.buildTriModelContext({
-        userId,
-        sessionId: session.id,
-        sourceType: input.sourceType,
-        opportunityId: input.opportunityId,
-        companyName: input.extractedCompany || 'Target Company',
-        roleTitle: input.extractedRole || 'Software Engineer',
-        persona: input.persona,
-      });
-
-      const initialQuestion = await questionGeneratorService.generateQuestion(triContext);
-      session.initialQuestion = initialQuestion;
+      const companyName = context.jobIntelligence?.companyName || input.extractedCompany || 'Target Company';
+      const roleTitle = context.jobIntelligence?.roleTitle || input.extractedRole || 'Target Role';
+      session.initialQuestion = `Welcome to your interview for ${roleTitle} at ${companyName}. To get started, please tell me about your background and how your key skills align with this position.`;
     } catch (err: any) {
       session.initialQuestion = `Welcome to your interview. To start, could you tell me about your background and recent relevant project experience?`;
     }
