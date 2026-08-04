@@ -38,6 +38,7 @@ export interface JobIntelligenceData {
   roleTitle: string;
   seniorityLevel: string;
   requiredSkills: string[];
+  preferredSkills?: string[];
   atsKeywords: string[];
   jobDescriptionText?: string;
   rawUrl?: string;
@@ -98,6 +99,10 @@ export interface EvaluationResult {
   feedbackTip: string;
   detectedSignals: string[];
   missingElements: string[];
+  /** LLM-generated positive reinforcement for the answer */
+  strengthObserved?: string;
+  /** LLM-generated improved version of the weakest STAR part */
+  improvedAnswerHint?: string;
 }
 
 export interface IEvaluator {

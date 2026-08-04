@@ -5,7 +5,10 @@ import { technicalEvaluator } from '../engines/interview-engine/evaluators/techn
 import { hireSignalEvaluator } from '../engines/interview-engine/evaluators/hire-signal.evaluator';
 import { conversationEngine } from '../engines/interview-engine/conversation.engine';
 import { interviewRepository } from '../repositories/interview.repository';
+import { aiRouter } from './aiRouter.service';
+import { PromptLibrary } from './promptLibrary.service';
 import { logger } from '../core/telemetry/logger.service';
+import type { InterviewPersona } from '../engines/interview-engine/evaluators/hire-signal.evaluator';
 
 export interface ProcessTurnInput {
   sessionId: string;
@@ -25,135 +28,82 @@ export interface ProcessTurnResult {
     metricsFound: boolean;
   };
   coachingTip: string;
+  strengthSummary: string;
   improvedAnswer: string;
+  hireRecommendation: string;
 }
 
 export class ConversationRuntimeService {
   /**
-   * Processes candidate answer turn and generates real-time conversational response & next question.
+   * Processes candidate answer turn:
+   * — LLM-grades the answer via 3 evaluators run in parallel
+   * — Generates an LLM-powered next question via the ConversationEngine
+   * — Produces a real AI-improved answer
    */
   public async processTurn(input: ProcessTurnInput): Promise<ProcessTurnResult> {
     logger.info({ sessionId: input.sessionId, service: 'ConversationRuntimeService' }, 'Processing conversation turn');
 
     const session: any = await interviewRepository.findSessionById(input.sessionId).catch(() => null);
+    const persona: InterviewPersona = (session?.persona || 'HIRING_MANAGER') as InterviewPersona;
 
     const triContext = await contextBuilderService.buildTriModelContext({
       userId: session?.userId || 'user_anon',
       sessionId: input.sessionId,
       sourceType: session?.sourceType || 'OPPORTUNITY',
       opportunityId: session?.opportunityId || undefined,
-      companyName: session?.extractedCompany || 'Stripe',
-      roleTitle: session?.extractedRole || 'Senior Backend Engineer',
-      persona: session?.persona || 'TECHNICAL_LEAD',
+      companyName: session?.extractedCompany || 'Target Company',
+      roleTitle: session?.extractedRole || 'Professional',
+      persona,
     });
 
     const company = triContext.opportunity.companyName || 'Target Company';
-    const role = triContext.opportunity.roleTitle || 'Software Engineer';
-    const activeQuestion = `As part of the ${role} interview at ${company}, describe how you approach complex challenges in your field.`;
+    const role = triContext.opportunity.roleTitle || 'Professional';
+    const activeQuestion = session?.currentQuestion ||
+      `As part of the ${role} interview at ${company}, describe a high-impact initiative you led and the measurable outcome you achieved.`;
 
-    // 1. Run Signal Evaluators
-    const starRes = await starEvaluator.evaluate(
-      {
-        sessionId: input.sessionId,
-        userId: triContext.candidate.userId,
-        sourceType: (session?.sourceType as any) || 'OPPORTUNITY',
-        candidate: {
-          fullName: triContext.candidate.fullName,
-          headline: triContext.candidate.headline,
-          skills: triContext.candidate.skills,
-          experienceLevel: triContext.candidate.experienceLevel,
-        },
-        jobIntelligence: {
-          companyName: triContext.opportunity.companyName,
-          roleTitle: triContext.opportunity.roleTitle,
-          seniorityLevel: triContext.opportunity.seniorityLevel,
-          requiredSkills: triContext.opportunity.requiredSkills,
-          atsKeywords: triContext.opportunity.atsKeywords,
-        },
-        persona: session?.persona as any || 'TECHNICAL_LEAD',
-        difficulty: 'INTERMEDIATE',
+    // Build CareerContext for evaluators
+    const careerContext = {
+      sessionId: input.sessionId,
+      userId: triContext.candidate.userId,
+      sourceType: (session?.sourceType as any) || 'OPPORTUNITY',
+      candidate: {
+        fullName: triContext.candidate.fullName,
+        headline: triContext.candidate.headline,
+        skills: triContext.candidate.skills,
+        experienceLevel: triContext.candidate.experienceLevel,
       },
-      activeQuestion,
-      input.userAnswerText
-    );
-
-    const leadRes = await leadershipEvaluator.evaluate(
-      {
-        sessionId: input.sessionId,
-        userId: triContext.candidate.userId,
-        sourceType: (session?.sourceType as any) || 'OPPORTUNITY',
-        candidate: {
-          fullName: triContext.candidate.fullName,
-          headline: triContext.candidate.headline,
-          skills: triContext.candidate.skills,
-          experienceLevel: triContext.candidate.experienceLevel,
-        },
-        jobIntelligence: {
-          companyName: triContext.opportunity.companyName,
-          roleTitle: triContext.opportunity.roleTitle,
-          seniorityLevel: triContext.opportunity.seniorityLevel,
-          requiredSkills: triContext.opportunity.requiredSkills,
-          atsKeywords: triContext.opportunity.atsKeywords,
-        },
-        persona: session?.persona as any || 'TECHNICAL_LEAD',
-        difficulty: 'INTERMEDIATE',
+      jobIntelligence: {
+        companyName: triContext.opportunity.companyName,
+        roleTitle: triContext.opportunity.roleTitle,
+        seniorityLevel: triContext.opportunity.seniorityLevel,
+        requiredSkills: triContext.opportunity.requiredSkills,
+        atsKeywords: triContext.opportunity.atsKeywords,
       },
-      activeQuestion,
-      input.userAnswerText
-    );
+      persona,
+      difficulty: (session?.difficulty as any) || 'INTERMEDIATE',
+    };
 
-    const techRes = await technicalEvaluator.evaluate(
-      {
-        sessionId: input.sessionId,
-        userId: triContext.candidate.userId,
-        sourceType: (session?.sourceType as any) || 'OPPORTUNITY',
-        candidate: {
-          fullName: triContext.candidate.fullName,
-          headline: triContext.candidate.headline,
-          skills: triContext.candidate.skills,
-          experienceLevel: triContext.candidate.experienceLevel,
-        },
-        jobIntelligence: {
-          companyName: triContext.opportunity.companyName,
-          roleTitle: triContext.opportunity.roleTitle,
-          seniorityLevel: triContext.opportunity.seniorityLevel,
-          requiredSkills: triContext.opportunity.requiredSkills,
-          atsKeywords: triContext.opportunity.atsKeywords,
-        },
-        persona: session?.persona as any || 'TECHNICAL_LEAD',
-        difficulty: 'INTERMEDIATE',
-      },
-      activeQuestion,
-      input.userAnswerText
-    );
+    // 1. Run LLM-graded Evaluator Suite in parallel
+    const [starRes, leadRes, techRes] = await Promise.all([
+      starEvaluator.evaluate(careerContext as any, activeQuestion, input.userAnswerText),
+      leadershipEvaluator.evaluate(careerContext as any, activeQuestion, input.userAnswerText),
+      technicalEvaluator.evaluate(careerContext as any, activeQuestion, input.userAnswerText),
+    ]);
 
-    const overall = hireSignalEvaluator.computeOverallHireSignal([starRes, leadRes, techRes]);
+    const overall = hireSignalEvaluator.computeOverallHireSignal([starRes, leadRes, techRes], persona);
 
-    // 2. Generate Conversation Step & Next Question
-    const nextStep = conversationEngine.generateNextStep(
-      {
-        sessionId: input.sessionId,
-        userId: triContext.candidate.userId,
-        sourceType: (session?.sourceType as any) || 'OPPORTUNITY',
-        candidate: {
-          fullName: triContext.candidate.fullName,
-          headline: triContext.candidate.headline,
-          skills: triContext.candidate.skills,
-          experienceLevel: triContext.candidate.experienceLevel,
-        },
-        jobIntelligence: {
-          companyName: triContext.opportunity.companyName,
-          roleTitle: triContext.opportunity.roleTitle,
-          seniorityLevel: triContext.opportunity.seniorityLevel,
-          requiredSkills: triContext.opportunity.requiredSkills,
-          atsKeywords: triContext.opportunity.atsKeywords,
-        },
-        persona: session?.persona as any || 'TECHNICAL_LEAD',
-        difficulty: 'INTERMEDIATE',
-      },
+    // 2. Generate next question via LLM ConversationEngine (now async)
+    const nextStep = await conversationEngine.generateNextStep(
+      careerContext as any,
       input.userAnswerText,
       starRes,
-      { competency: 'Core Problem Solving', targetDepth: 2, currentDepth: 1, satisfied: false }
+      {
+        competency: 'Core Problem Solving',
+        targetDepth: 2,
+        currentDepth: session?.questionDepth || 1,
+        satisfied: false,
+        askedQuestions: session?.askedQuestions || [],
+      }
     );
 
     const situationOk = starRes.detectedSignals.includes('Situation Defined');
@@ -162,11 +112,10 @@ export class ConversationRuntimeService {
     const resultOk = starRes.detectedSignals.includes('Outcome & Impact');
     const metricsFound = starRes.detectedSignals.includes('Quantifiable Metrics Found');
 
-    const improvedAnswer = metricsFound
-      ? input.userAnswerText.trim()
-      : `${input.userAnswerText.trim()} Specifically, this achieved a measurable efficiency gain and improved overall system performance.`;
+    // 3. Generate real LLM-improved answer
+    const improvedAnswer = await this.generateImprovedAnswer(activeQuestion, input.userAnswerText);
 
-    // Persist feedback turn to DB
+    // 4. Persist feedback turn
     await interviewRepository.saveFeedback({
       sessionId: input.sessionId,
       questionText: activeQuestion,
@@ -181,25 +130,44 @@ export class ConversationRuntimeService {
       improvedAnswer,
     });
 
-    const personaMessage = overall.summaryTip
-      ? `Thank you for sharing. ${overall.summaryTip}`
-      : "Thank you for explaining your approach clearly.";
+    // Compose persona-appropriate acknowledgment
+    const getPersonaAck = (p: string): string => {
+      if (p === 'FRIENDLY_HR') return `Thank you for sharing that. ${overall.strengthSummary}`;
+      if (p === 'HIRING_MANAGER') return `Appreciated. ${overall.strengthSummary} Here is my next question.`;
+      if (p === 'TECHNICAL_LEAD') return `Good. ${overall.summaryTip || 'I noted the technical approach. Let us dig deeper.'}`;
+      if (p === 'FAANG_INTERVIEWER') return `Understood. ${overall.summaryTip || 'Let us continue.'}`;
+      if (p === 'CEO_FOUNDER') return `Interesting perspective. ${overall.strengthSummary} Let us explore that further.`;
+      return `Thank you. ${overall.summaryTip || overall.strengthSummary}`;
+    };
+    const personaMessage = getPersonaAck(persona);
 
     return {
       personaMessage,
       nextQuestion: nextStep.nextQuestion,
       isFollowUp: nextStep.isFollowUp,
       score: overall.overallScore,
-      signals: {
-        situationOk,
-        taskOk,
-        actionOk,
-        resultOk,
-        metricsFound,
-      },
+      signals: { situationOk, taskOk, actionOk, resultOk, metricsFound },
       coachingTip: overall.summaryTip,
+      strengthSummary: overall.strengthSummary,
       improvedAnswer,
+      hireRecommendation: overall.hireRecommendation,
     };
+  }
+
+  private async generateImprovedAnswer(question: string, answer: string): Promise<string> {
+    try {
+      const prompt = PromptLibrary.ANSWER_IMPROVE_v1;
+      const response = await aiRouter.complete({
+        task: 'ANSWER_IMPROVE',
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.buildUserPrompt(question, answer),
+        jsonMode: true,
+      });
+      const result = aiRouter.parseJSON<{ improvedAnswer: string }>(response, { improvedAnswer: answer });
+      return result.improvedAnswer || answer;
+    } catch {
+      return answer;
+    }
   }
 }
 

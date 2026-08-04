@@ -6,9 +6,12 @@ import { starEvaluator } from './evaluators/star.evaluator';
 import { leadershipEvaluator } from './evaluators/leadership.evaluator';
 import { technicalEvaluator } from './evaluators/technical.evaluator';
 import { hireSignalEvaluator } from './evaluators/hire-signal.evaluator';
+import { aiRouter } from '../../services/aiRouter.service';
+import { PromptLibrary } from '../../services/promptLibrary.service';
 import { logger } from '../../core/telemetry/logger.service';
+import type { InterviewPersona } from './evaluators/hire-signal.evaluator';
 
-export type InterviewPersona = 'FRIENDLY_HR' | 'HIRING_MANAGER' | 'TECHNICAL_LEAD' | 'FAANG_INTERVIEWER' | 'CEO_FOUNDER';
+export type { InterviewPersona };
 
 export interface BriefingInput {
   userId: string;
@@ -26,7 +29,8 @@ export interface EvaluateAnswerInput {
 
 export class InterviewCoachEngine {
   /**
-   * Generates AI Briefing for any of the 4 interview entry sources.
+   * Generates AI Briefing for any of the interview entry sources.
+   * Computes real readiness score and estimated time from candidate history.
    */
   public async getBriefing(input: BriefingInput) {
     logger.info({ ...input, service: 'InterviewCoachEngine' }, 'Generating Mission Briefing');
@@ -35,7 +39,9 @@ export class InterviewCoachEngine {
     let skillsToFocus: string[] = ['Problem Solving', 'STAR Storytelling', 'Technical Leadership'];
     let difficulty = 'INTERMEDIATE';
     let companyName = input.company || 'Target Organization';
+    let roleTitle = input.role || 'Target Position';
 
+    // Fetch opportunity-specific intelligence
     if (input.opportunityId) {
       const analysis = await OpportunityIntelligenceService.getOpportunityAnalysis(input.opportunityId).catch(() => null);
       if (analysis) {
@@ -45,23 +51,29 @@ export class InterviewCoachEngine {
       }
     }
 
+    // Compute real readiness score from candidate history
+    const overallReadinessScore = await this.computeReadinessScore(input.userId, input.opportunityId);
+
+    // Compute estimated time based on difficulty
+    const estimatedTimeMinutes = this.computeEstimatedTime(difficulty, questions.length);
+
     if (questions.length === 0) {
       questions = [
-        `Looking at the role at ${companyName}, describe a time when you resolved a complex technical or architectural challenge under a tight deadline.`,
-        `Why do you want to join our organization, and what specific strategic value do you bring to this position?`,
-        `Describe a key project where you demonstrated ownership, aligned stakeholders, and measured quantitative impact.`
+        `Tell me about a time when you resolved a complex technical or architectural challenge at ${companyName} or a similar environment.`,
+        `Why do you want to join ${companyName} as a ${roleTitle}, and what specific value do you bring that another candidate might not?`,
+        `Describe a key project where you demonstrated ownership, aligned stakeholders, and delivered measurable results.`,
       ];
     }
 
     return {
       opportunityId: input.opportunityId,
-      estimatedTimeMinutes: 18,
+      estimatedTimeMinutes,
       difficulty,
-      overallReadinessScore: 82,
+      overallReadinessScore,
       focusTopics: skillsToFocus,
       likelyQuestions: questions,
       personalityOptions: [
-        { id: 'FRIENDLY_HR', name: 'Friendly HR', description: 'Warm, behavioral, culture fit & motivation focused' },
+        { id: 'FRIENDLY_HR', name: 'Friendly HR', description: 'Warm, behavioural, culture fit & motivation focused' },
         { id: 'HIRING_MANAGER', name: 'Hiring Manager', description: 'Practical, team alignment & past execution focused' },
         { id: 'TECHNICAL_LEAD', name: 'Technical Lead', description: 'Deep system design, code architecture & trade-offs' },
         { id: 'FAANG_INTERVIEWER', name: 'Tough FAANG Interviewer', description: 'High-pressure, strict STAR metrics & edge cases' },
@@ -71,29 +83,33 @@ export class InterviewCoachEngine {
   }
 
   /**
-   * Evaluates user's answer using the Evaluator Plugin Suite.
+   * Evaluates user's answer using the LLM-graded Evaluator Suite.
+   * Generates a real AI-improved answer instead of a hardcoded string.
    */
   public async evaluateAnswer(input: EvaluateAnswerInput) {
     const { sessionId, questionText, answerText } = input;
 
     const session: any = await interviewRepository.findSessionById(sessionId).catch(() => null);
+    const persona: InterviewPersona = (session?.persona || 'HIRING_MANAGER') as InterviewPersona;
 
-    // Build synthetic CareerContext for evaluation engine
+    // Build unified CareerContext for evaluation engine
     const careerContext = await interviewContextBuilderService.buildContext({
       userId: session?.userId || 'user_anon',
       sourceType: session?.sourceType || 'OPPORTUNITY',
       opportunityId: session?.opportunityId || undefined,
       extractedCompany: session?.extractedCompany || undefined,
       extractedRole: session?.extractedRole || undefined,
-      persona: session?.persona || 'HIRING_MANAGER',
+      persona,
     });
 
-    // Run Evaluator Suite
-    const starRes = await starEvaluator.evaluate(careerContext, questionText, answerText);
-    const leadRes = await leadershipEvaluator.evaluate(careerContext, questionText, answerText);
-    const techRes = await technicalEvaluator.evaluate(careerContext, questionText, answerText);
+    // Run LLM-graded Evaluator Suite in parallel
+    const [starRes, leadRes, techRes] = await Promise.all([
+      starEvaluator.evaluate(careerContext, questionText, answerText),
+      leadershipEvaluator.evaluate(careerContext, questionText, answerText),
+      technicalEvaluator.evaluate(careerContext, questionText, answerText),
+    ]);
 
-    const overall = hireSignalEvaluator.computeOverallHireSignal([starRes, leadRes, techRes]);
+    const overall = hireSignalEvaluator.computeOverallHireSignal([starRes, leadRes, techRes], persona);
 
     const situationOk = starRes.detectedSignals.includes('Situation Defined');
     const taskOk = starRes.detectedSignals.includes('Task Goal Outlined');
@@ -101,7 +117,8 @@ export class InterviewCoachEngine {
     const resultOk = starRes.detectedSignals.includes('Outcome & Impact');
     const metricsFound = starRes.detectedSignals.includes('Quantifiable Metrics Found');
 
-    const improvedAnswer = `${answerText.trim()} This initiative directly resulted in a 30% increase in system performance metrics and team delivery velocity.`;
+    // Generate real AI-improved answer
+    const improvedAnswer = await this.generateImprovedAnswer(questionText, answerText);
 
     const feedback = await interviewRepository.saveFeedback({
       sessionId,
@@ -117,22 +134,96 @@ export class InterviewCoachEngine {
       improvedAnswer,
     });
 
-    // Automatically auto-extract strong answers (Score >= 80) into Candidate's Story Library
+    // Auto-extract high-scoring answers (>= 80) into the Candidate Story Library
     if (overall.overallScore >= 80 && session?.userId) {
+      const starHint = (starRes as any).improvedAnswerHint || '';
       await interviewRepository.saveUserStory({
         userId: session.userId,
-        title: `Story: ${questionText.slice(0, 30)}...`,
-        situation: answerText.slice(0, 150),
-        task: 'Drive technical execution',
-        action: answerText.slice(0, 200),
-        result: 'Achieved quantitative performance boost',
-        metrics: metricsFound ? ['30% metric boost'] : [],
-        technologies: careerContext.jobIntelligence.requiredSkills,
-        tags: ['auto-extracted', 'high-score'],
+        title: `Story: ${questionText.slice(0, 50)}...`,
+        situation: answerText.slice(0, 200),
+        task: 'Deliver measurable technical or business outcome',
+        action: answerText.slice(0, 300),
+        result: starHint || 'Achieved measurable positive impact',
+        metrics: metricsFound ? [starRes.detectedSignals.find((s) => s.includes('Metric')) || 'Quantified impact'] : [],
+        technologies: careerContext.jobIntelligence.requiredSkills.slice(0, 4),
+        tags: ['auto-extracted', 'high-score', `score-${overall.overallScore}`],
       }).catch(() => null);
     }
 
-    return feedback;
+    return {
+      ...feedback,
+      hireRecommendation: overall.hireRecommendation,
+      strengthSummary: overall.strengthSummary,
+      confidence: overall.confidence,
+    };
+  }
+
+  /**
+   * Computes a real readiness score based on past session performance and profile completeness.
+   */
+  private async computeReadinessScore(userId: string, opportunityId?: string): Promise<number> {
+    const pastSessions = await interviewRepository.listUserSessions(userId).catch(() => []);
+
+    if (pastSessions.length === 0) return 65; // First-time user baseline
+
+    const avgScore = Math.round(
+      pastSessions.reduce((acc, s: any) => acc + (s.readinessScore || s.avgScore || 70), 0) / pastSessions.length
+    );
+
+    // Recency bonus: sessions in last 7 days
+    const recentSessions = pastSessions.filter((s: any) => {
+      const date = new Date(s.createdAt || 0);
+      return Date.now() - date.getTime() < 7 * 24 * 60 * 60 * 1000;
+    });
+    const recencyBonus = Math.min(10, recentSessions.length * 2);
+
+    // Volume bonus: more practice = higher readiness
+    const volumeBonus = Math.min(10, pastSessions.length * 2);
+
+    return Math.min(98, avgScore + recencyBonus + volumeBonus);
+  }
+
+  /**
+   * Computes estimated interview duration based on difficulty and question count.
+   */
+  private computeEstimatedTime(difficulty: string, questionCount: number): number {
+    const baseMinutes: Record<string, number> = {
+      ENTRY_LEVEL: 12,
+      MID_LEVEL: 18,
+      INTERMEDIATE: 18,
+      SENIOR: 22,
+      STAFF: 28,
+      PRINCIPAL: 30,
+      EXECUTIVE: 35,
+    };
+    const base = baseMinutes[difficulty] || 18;
+    const perQuestion = Math.max(0, questionCount - 3) * 2;
+    return base + perQuestion;
+  }
+
+  /**
+   * Generates an LLM-powered improved version of the candidate's answer.
+   */
+  private async generateImprovedAnswer(question: string, answer: string): Promise<string> {
+    try {
+      const prompt = PromptLibrary.ANSWER_IMPROVE_v1;
+      const response = await aiRouter.complete({
+        task: 'ANSWER_IMPROVE',
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.buildUserPrompt(question, answer),
+        jsonMode: true,
+      });
+
+      const result = aiRouter.parseJSON<{ improvedAnswer: string; keyImprovements: string[] }>(response, {
+        improvedAnswer: answer,
+        keyImprovements: [],
+      });
+
+      return result.improvedAnswer || answer;
+    } catch {
+      // Safe fallback — return original answer rather than fabricated content
+      return answer;
+    }
   }
 }
 
