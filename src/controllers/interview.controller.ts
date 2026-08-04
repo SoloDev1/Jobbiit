@@ -112,6 +112,7 @@ export async function createSession(req: Request, res: Response): Promise<void> 
 
     const session: any = await interviewRepository.createSession(input);
 
+    let initialQuestion = `Welcome to your interview. To start, could you tell me about your background and recent relevant project experience?`;
     try {
       const context = await interviewContextBuilderService.buildContext({
         userId,
@@ -123,10 +124,25 @@ export async function createSession(req: Request, res: Response): Promise<void> 
 
       const companyName = context.jobIntelligence?.companyName || input.extractedCompany || 'Target Company';
       const roleTitle = context.jobIntelligence?.roleTitle || input.extractedRole || 'Target Role';
-      session.initialQuestion = `Welcome to your interview for ${roleTitle} at ${companyName}. To get started, please tell me about your background and how your key skills align with this position.`;
-    } catch (err: any) {
-      session.initialQuestion = `Welcome to your interview. To start, could you tell me about your background and recent relevant project experience?`;
-    }
+      initialQuestion = `Welcome to your interview for ${roleTitle} at ${companyName}. To get started, please tell me about your background and how your key skills align with this position.`;
+    } catch (err: any) {}
+
+    session.initialQuestion = initialQuestion;
+
+    const initialState = {
+      phase: 'TECHNICAL',
+      competency: 'introduction',
+      currentDepth: 1,
+      targetDepth: 2,
+      currentQuestion: initialQuestion,
+      askedQuestions: [initialQuestion],
+      completedCompetencies: [],
+      followUpCount: 0,
+      objectiveSatisfied: false
+    };
+
+    await interviewRepository.updateSessionState(session.id, initialState);
+    session.conversationState = initialState;
 
     sendCreated(res, session, 'Interview session initialized');
   } catch (error: any) {
@@ -173,5 +189,62 @@ export async function getFlashcards(req: Request, res: Response): Promise<void> 
     sendSuccess(res, cards, 'Personalized flashcards loaded');
   } catch (error: any) {
     sendError(res, error.message || 'Failed to fetch flashcards', 500);
+  }
+}
+
+export async function getSessionReport(req: Request, res: Response): Promise<void> {
+  try {
+        const sessionId = req.params.sessionId as string;
+    if (!sessionId) {
+      sendError(res, 'sessionId is required', 400);
+      return;
+    }
+
+    const session = await interviewRepository.findSessionById(sessionId);
+    if (!session) {
+      sendError(res, 'Interview session not found', 404);
+      return;
+    }
+
+    const feedbacks = session.feedbacks || [];
+    const totalTurns = feedbacks.length;
+
+    const situationOkCount = feedbacks.filter((f: any) => f.situationOk).length;
+    const taskOkCount = feedbacks.filter((f: any) => f.taskOk).length;
+    const actionOkCount = feedbacks.filter((f: any) => f.actionOk).length;
+    const resultOkCount = feedbacks.filter((f: any) => f.resultOk).length;
+    const metricsFoundCount = feedbacks.filter((f: any) => f.metricsFound).length;
+
+    const overallScore = session.readinessScore || session.starScore || 70;
+
+    const report = {
+      sessionId: session.id,
+      overallScore,
+      totalTurns,
+      situationOk: totalTurns ? (situationOkCount / totalTurns) >= 0.5 : false,
+      taskOk: totalTurns ? (taskOkCount / totalTurns) >= 0.5 : false,
+      actionOk: totalTurns ? (actionOkCount / totalTurns) >= 0.5 : false,
+      resultOk: totalTurns ? (resultOkCount / totalTurns) >= 0.5 : false,
+      metricsFound: totalTurns ? (metricsFoundCount / totalTurns) >= 0.5 : false,
+      situationOkCount,
+      taskOkCount,
+      actionOkCount,
+      resultOkCount,
+      metricsFoundCount,
+    };
+
+    sendSuccess(res, report, 'Interview report compiled');
+  } catch (error: any) {
+    sendError(res, error.message || 'Failed to fetch session report', 500);
+  }
+}
+
+export async function getSession(req: Request, res: Response): Promise<void> {
+  try {
+    const sessionId = req.params.sessionId;
+    const session = await interviewRepository.findSessionById(sessionId);
+    sendSuccess(res, session, 'Interview session retrieved successfully');
+  } catch (error: any) {
+    sendError(res, error.message || 'Failed to retrieve interview session', 500);
   }
 }

@@ -33,10 +33,16 @@ export class LeadershipEvaluator implements IEvaluator {
 
     try {
       const prompt = PromptLibrary.EVAL_LEADERSHIP_v1;
+      const historyText = context.conversationHistory && context.conversationHistory.length > 0
+        ? context.conversationHistory.map((h: any) => `${h.speaker}: ${h.text}`).join('\n')
+        : '';
+      const userPrompt = prompt.buildUserPrompt(question, answer) +
+        (historyText ? `\n\nConversation history for context:\n${historyText}` : '');
+
       const response = await aiRouter.complete({
         task: 'ANSWER_EVALUATE_LEADERSHIP',
         systemPrompt: prompt.systemPrompt,
-        userPrompt: prompt.buildUserPrompt(question, answer),
+        userPrompt,
         jsonMode: true,
       });
 

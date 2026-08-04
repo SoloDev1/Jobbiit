@@ -42,10 +42,20 @@ export class InterviewRepository {
         practiceCategory: (data.practiceCategory as any) || undefined,
         persona: (data.persona as any) || 'HIRING_MANAGER',
         difficulty: data.difficulty || 'INTERMEDIATE',
+        conversationState: (data as any).conversationState || null,
       },
       include: {
         feedbacks: true,
         opportunity: true,
+      },
+    });
+  }
+
+  public async updateSessionState(sessionId: string, state: any) {
+    return prisma.interviewSession.update({
+      where: { id: sessionId },
+      data: {
+        conversationState: state,
       },
     });
   }

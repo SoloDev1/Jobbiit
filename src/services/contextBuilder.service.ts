@@ -1,5 +1,6 @@
 import { profileRepository } from '../repositories/profile.repository';
 import { OpportunityIntelligenceService } from './opportunityIntelligence.service';
+import { opportunityRepository } from '../repositories/opportunity.repository';
 import { logger } from '../core/telemetry/logger.service';
 import type { CandidateProfileSummary } from '../types/interview.types';
 
@@ -11,6 +12,7 @@ export interface CandidateContext {
   experienceLevel: string;
   savedStories: any[];
   weaknessHistory: string[];
+  conversationHistory?: any[];
 }
 
 export interface OpportunityContext {
@@ -57,6 +59,7 @@ export class ContextBuilderService {
     companyName?: string;
     roleTitle?: string;
     persona?: any;
+    conversationHistory?: any[];
   }): Promise<TriModelContext> {
     logger.info({ userId: input.userId, sourceType: input.sourceType, service: 'ContextBuilderService' }, 'Building Tri-Model Context');
 
@@ -77,6 +80,7 @@ export class ContextBuilderService {
       experienceLevel: 'SENIOR',
       savedStories: [],
       weaknessHistory: ['Quantifiable Impact Metrics'],
+      conversationHistory: input.conversationHistory || [],
     };
 
     // 2. Opportunity Context
@@ -86,12 +90,20 @@ export class ContextBuilderService {
     let atsKeywords = ['scalability', 'performance', 'ownership'];
 
     if (input.opportunityId) {
-      const analysis = await OpportunityIntelligenceService.getOpportunityAnalysis(input.opportunityId).catch(() => null);
+      const [analysis, oppRecord] = await Promise.all([
+        OpportunityIntelligenceService.getOpportunityAnalysis(input.opportunityId).catch(() => null),
+        opportunityRepository.findById(input.opportunityId).catch(() => null),
+      ]);
+      if (oppRecord) {
+        companyName = oppRecord.organisation || companyName;
+        roleTitle = oppRecord.title || roleTitle;
+      }
       if (analysis) {
-        companyName = analysis.summary ? analysis.summary.split(' ')[0] : companyName;
-        roleTitle = 'Software Engineer';
-        requiredSkills = analysis.requiredSkills || requiredSkills;
-        atsKeywords = analysis.atsKeywords || atsKeywords;
+        if (!oppRecord) {
+          companyName = analysis.summary ? analysis.summary.split(' ')[0] : companyName;
+        }
+        requiredSkills = analysis.requiredSkills?.length > 0 ? analysis.requiredSkills : requiredSkills;
+        atsKeywords = analysis.atsKeywords?.length > 0 ? analysis.atsKeywords : atsKeywords;
       }
     }
 

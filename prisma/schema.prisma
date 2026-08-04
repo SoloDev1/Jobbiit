@@ -1260,6 +1260,7 @@ model InterviewSession {
   readinessScore   Int                 @default(75)
   starScore        Int                 @default(80)
   sessionReplay    Json?
+  conversationState Json?
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 

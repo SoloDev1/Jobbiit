@@ -90,6 +90,7 @@ export interface CareerContext {
   persona: InterviewPersona;
   difficulty: 'JUNIOR' | 'INTERMEDIATE' | 'SENIOR' | 'STAFF' | 'EXECUTIVE';
   pastMemory?: CandidateCareerMemory;
+  conversationHistory?: Array<{ speaker: 'INTERVIEWER' | 'CANDIDATE' | 'SYSTEM'; text: string; timestamp?: string }>;
 }
 
 export interface EvaluationResult {
