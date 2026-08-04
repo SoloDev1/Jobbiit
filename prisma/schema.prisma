@@ -650,6 +650,7 @@ model Opportunity {
   events          UserEvent[]
   reports         Report[]
   analysis        OpportunityAnalysis?
+  intelligence    OpportunityIntelligence?
   interviewSessions InterviewSession[]
   flashcards        Flashcard[]
 
@@ -1120,6 +1121,42 @@ model OpportunityAnalysis {
   careerLevel        String?
   generatedAt        DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
+}
+
+model OpportunityIntelligence {
+  id                    String              @id @default(uuid())
+  opportunityId         String              @unique
+  opportunity           Opportunity         @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  
+  // Modular JSON Payloads
+  overview              Json                // Executive summary, whoShouldApply, whoShouldNotApply, urgency, competition
+  skills                Json                // Required, preferred, technical, soft, leadership, experience, education
+  ats                   Json                // Keywords, priority keywords, hidden keywords, resume/CL suggestions
+  interview             Json                // Behavioral, technical, system design, leadership questions
+  recommendation        Json                // Decision (Apply Immediately, Prepare More), health score, reason
+  categoryData          Json?               // Scholarship/Grant fields (funding, living stipend, travel, reporting)
+  
+  // Granular Confidence & Quality Metrics
+  sectionConfidence     Json                // { summary: 0.97, skills: 0.95, ats: 0.99, interview: 0.88 }
+  overallHealthScore    Float               @default(90.0)
+  
+  // Versioning & Prompt Registry Tracking
+  schemaVersion         String              @default("2.0")
+  promptVersion         String              @default("job_v1")
+  promptCategory        OpportunityCategory @default(JOB)
+  aiProvider            String              @default("OpenAI")
+  aiModel               String              @default("gpt-4o-mini")
+  
+  // Audit & Cost Telemetry
+  generationReason      String              @default("INITIAL") // INITIAL, PROMPT_UPDATED, VALIDATION_FAILED, MANUAL_REFRESH
+  latencyMs             Int                 @default(0)
+  tokenUsageId          String?
+  
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([opportunityId])
+  @@index([schemaVersion])
 }
 
 enum WorkspaceStatus {

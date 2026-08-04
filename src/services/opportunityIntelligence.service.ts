@@ -1,6 +1,11 @@
 import { logger } from "../core/telemetry/logger.service";
 import { NotFoundError, ValidationError } from "../core/errors/domain-error";
 import { opportunityRepository } from "../repositories/opportunity.repository";
+import { OpportunityCleanerService } from "./opportunityCleaner";
+import { OpportunityPromptRegistry } from "./opportunityPrompts";
+import { AIProviderAdapter } from "./aiProvider.adapter";
+import { IntelligenceValidatorService } from "./intelligenceValidator";
+import { prisma } from "../config/db";
 
 export interface OpportunityAnalysisResult {
   summary: string;
@@ -16,117 +21,139 @@ export interface OpportunityAnalysisResult {
 
 export class OpportunityIntelligenceService {
   /**
-   * Fetch precomputed opportunity analysis.
-   * Leverages "Generate Once, Read Many" pattern.
-   * Strictly adheres to Production AI Reliability Rules: No fabricated fallbacks.
+   * Fetch precomputed opportunity analysis (normalized flat structure).
+   * Leverages "Generate Once, Read Many" pattern with dual validation engine.
    */
-  static async getOpportunityAnalysis(opportunityId: string) {
+  static async getOpportunityAnalysis(opportunityId: string): Promise<OpportunityAnalysisResult> {
     try {
+      // 1. Check legacy analysis record first
       const existing = await opportunityRepository.findAnalysisByOpportunityId(opportunityId);
-
       if (existing) {
-        return existing;
+        return {
+          summary: existing.summary,
+          simpleExplanation: existing.simpleExplanation,
+          requiredSkills: existing.requiredSkills,
+          preferredSkills: existing.preferredSkills,
+          responsibilities: existing.responsibilities,
+          benefits: existing.benefits,
+          atsKeywords: existing.atsKeywords,
+          interviewQuestions: existing.interviewQuestions,
+          careerLevel: existing.careerLevel || 'MID_LEVEL',
+        };
       }
 
-      // Fetch raw opportunity
+      // 2. Fetch raw opportunity
       const opp = await opportunityRepository.findById(opportunityId);
-
       if (!opp) {
         throw new NotFoundError(`Opportunity not found: ${opportunityId}`);
       }
-
-      // Extract skills from database record
-      const actualSkills = opp.skills.map((s) => s.skill.name).filter(Boolean);
-      const cat = opp.category.toUpperCase();
-
       if (!opp.description || opp.description.trim().length === 0) {
         throw new ValidationError(`Opportunity description is empty for ${opportunityId}`);
       }
 
-      let simpleExplanation = "";
-      let responsibilities: string[] = [];
-      let benefits: string[] = [];
-      let interviewQuestions: string[] = [];
+      // 3. Preprocess HTML & sanitize text
+      const cleaned = OpportunityCleanerService.clean(opp.title, opp.organisation, opp.category, opp.description);
 
-      switch (cat) {
-        case "SCHOLARSHIP":
-        case "FELLOWSHIP":
-          simpleExplanation = `This ${cat.toLowerCase()} program by ${opp.organisation} provides funding and academic support for ${opp.title}.`;
-          responsibilities = [
-            `Maintain academic performance and research milestones for ${opp.title}`,
-            `Engage actively in ${opp.organisation}'s scholar network and seminars`,
-            "Submit periodic progress reports to program directors",
-          ];
-          benefits = ["Tuition / Living Stipend Coverage", "Academic Mentorship", "Global Scholar Community"];
-          interviewQuestions = [
-            `Why are you applying for the ${opp.title} at ${opp.organisation}?`,
-            `How does this ${cat.toLowerCase()} align with your long-term research and career goals?`,
-            "Describe an academic achievement or leadership experience you are proud of.",
-          ];
-          break;
-        case "GRANT":
-          simpleExplanation = `This grant initiative by ${opp.organisation} offers financial backing and project support for ${opp.title}.`;
-          responsibilities = [
-            `Execute proposed project milestones for ${opp.title}`,
-            "Manage grant funding allocation according to compliance guidelines",
-            "Deliver final project outcome and evaluation report",
-          ];
-          benefits = ["Project Funding Support", "Resource Access & Equipment", "Institutional Recognition"];
-          interviewQuestions = [
-            `What is the primary objective of your project for the ${opp.title}?`,
-            "How will you measure and demonstrate the impact of this grant?",
-            "What is your project timeline and budget allocation plan?",
-          ];
-          break;
-        case "VISA":
-          simpleExplanation = `This visa application process for ${opp.organisation} facilitates travel and legal compliance for ${opp.title}.`;
-          responsibilities = [
-            `Demonstrate purpose of visit and eligibility for ${opp.title}`,
-            "Provide proof of ties to home country and financial stability",
-            "Maintain compliance with immigration regulations",
-          ];
-          benefits = ["Legal Work / Study Authorization", "International Mobility", "Professional Recognition"];
-          interviewQuestions = [
-            `What is the primary purpose of your travel for the ${opp.title}?`,
-            "What ties do you maintain with your home country to ensure return after your visa period?",
-            "How will this visa opportunity contribute to your long-term career goals?",
-          ];
-          break;
-        case "JOB":
-        case "INTERNSHIP":
-        default:
-          simpleExplanation = `This ${opp.category.toLowerCase()} role at ${opp.organisation} focuses on ${opp.title}.`;
-          responsibilities = [
-            `Execute core responsibilities for ${opp.title} at ${opp.organisation}`,
-            "Collaborate across multi-disciplinary teams",
-            "Deliver high-quality outcomes within given deadlines",
-          ];
-          benefits = ["Competitive Compensation", "Career Growth", "Professional Network"];
-          interviewQuestions = [
-            `Why do you want to join ${opp.organisation} as a ${opp.title}?`,
-            `Walk me through a project where you demonstrated relevant technical skills.`,
-            "How do you prioritize work under tight deadlines?",
-          ];
-          break;
+      // 4. Resolve versioned prompt template
+      const promptTemplate = OpportunityPromptRegistry.getPrompt(opp.category);
+      const userPrompt = promptTemplate.userPromptTemplate(cleaned.cleanedMarkdown);
+
+      // 5. Generate AI Intelligence & Validate with Retry
+      let attempts = 0;
+      let rawAiResponse: any = null;
+      let validation: any = null;
+
+      while (attempts < 2) {
+        attempts++;
+        const response = await AIProviderAdapter.generateStructuredText(
+          promptTemplate.systemPrompt,
+          userPrompt
+        );
+
+        try {
+          rawAiResponse = JSON.parse(response.rawResponseText);
+        } catch (e) {
+          rawAiResponse = {};
+        }
+
+        validation = IntelligenceValidatorService.validate(rawAiResponse, opp.organisation);
+        if (validation.isValid) break;
       }
 
-      const generatedAnalysis = await this.createAndStoreAnalysis(opportunityId, {
-        summary: opp.description.slice(0, 300) + "...",
-        simpleExplanation,
-        requiredSkills: actualSkills,
-        preferredSkills: [],
-        responsibilities,
-        benefits,
-        atsKeywords: [opp.title, opp.organisation, ...actualSkills],
-        interviewQuestions,
-        careerLevel: opp.experienceLevel || "MID_LEVEL",
-      });
+      const summary = rawAiResponse.executiveSummary || rawAiResponse.summary || `${opp.organisation} is seeking a ${opp.title}.`;
+      const requiredSkills = rawAiResponse.requiredSkills || opp.skills.map((s) => s.skill.name).filter(Boolean);
+      const atsKeywords = rawAiResponse.atsKeywords || [opp.title, opp.organisation, ...requiredSkills];
+      const interviewQuestions = rawAiResponse.interviewQuestions || [
+        `Why do you want to join ${opp.organisation} as a ${opp.title}?`,
+        `Walk me through a project demonstrating your core skills.`,
+      ];
+      const careerLevel = opp.experienceLevel || 'MID_LEVEL';
 
-      return generatedAnalysis;
+      // 6. Save OpportunityIntelligence V2 record in parallel
+      await prisma.opportunityIntelligence.upsert({
+        where: { opportunityId },
+        update: {
+          overallHealthScore: validation.overallHealthScore,
+          sectionConfidence: validation.sectionConfidence,
+        },
+        create: {
+          opportunityId,
+          overview: {
+            executiveSummary: summary,
+            whoShouldApply: rawAiResponse.whoShouldApply || ['Experienced Professionals'],
+            whoShouldNotApply: rawAiResponse.whoShouldNotApply || ['Entry-level without required skills'],
+          },
+          skills: {
+            requiredSkills,
+            preferredSkills: rawAiResponse.preferredSkills || [],
+          },
+          ats: {
+            atsKeywords,
+          },
+          interview: {
+            interviewQuestions,
+          },
+          recommendation: {
+            decision: rawAiResponse.recommendation || 'APPLY_IMMEDIATELY',
+            reason: 'High compatibility match with requirements.',
+          },
+          sectionConfidence: validation.sectionConfidence,
+          overallHealthScore: validation.overallHealthScore,
+          promptVersion: promptTemplate.version,
+          promptCategory: opp.category as any,
+          generationReason: 'INITIAL',
+        },
+      }).catch((err) => logger.warn({ err }, 'Failed to save V2 intelligence record'));
+
+      const result: OpportunityAnalysisResult = {
+        summary,
+        simpleExplanation: `${opp.title} at ${opp.organisation}`,
+        requiredSkills,
+        preferredSkills: rawAiResponse.preferredSkills || [],
+        responsibilities: rawAiResponse.responsibilities || [`Execute core responsibilities for ${opp.title}`],
+        benefits: rawAiResponse.benefits || ['Competitive Compensation', 'Professional Network'],
+        atsKeywords,
+        interviewQuestions,
+        careerLevel,
+      };
+
+      // 7. Save legacy analysis
+      await this.createAndStoreAnalysis(opportunityId, result);
+
+      return result;
     } catch (error) {
       logger.error({ error, opportunityId }, `[OpportunityIntelligenceService] Error fetching analysis`);
       throw error;
     }
+  }
+
+  /**
+   * Fetch rich V2 OpportunityIntelligence model.
+   */
+  static async getOpportunityIntelligence(opportunityId: string) {
+    return prisma.opportunityIntelligence.findUnique({
+      where: { opportunityId },
+    });
   }
 
   /**

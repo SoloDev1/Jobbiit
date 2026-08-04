@@ -5,6 +5,7 @@ import {
   getCompetencyGraph,
   ingestJob,
   createSession,
+  processTurn,
   evaluateAnswer,
   getUserStories,
   getFlashcards,
@@ -20,6 +21,7 @@ router.get('/pre-briefing', getPreBriefingPlan);
 router.get('/competencies', getCompetencyGraph);
 router.post('/ingest', ingestJob);
 router.post('/session', createSession);
+router.post('/turn', processTurn);
 router.post('/evaluate', evaluateAnswer);
 router.get('/stories', getUserStories);
 router.get('/flashcards', getFlashcards);

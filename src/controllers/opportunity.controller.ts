@@ -12,6 +12,7 @@ import { opportunityRepository } from '../repositories/opportunity.repository'
 import * as OppInteractions from '../models/opportunity-interactions.model'
 import * as notificationService from '../services/notification.service'
 import { OpportunityIntelligenceService } from '../services/opportunityIntelligence.service'
+import { CareerMemorySyncService } from '../services/careerMemorySync.service'
 import { prisma } from '../config/db'
 import { audit } from '../models/AuditLog'
 import {
@@ -69,6 +70,9 @@ export async function getOpportunityById(req: Request, res: Response): Promise<v
     return
   }
 
+  // Sync view event & career memory asynchronously
+  CareerMemorySyncService.syncOpportunityInteraction(userId(req), parsed.data, 'VIEW_OPPORTUNITY');
+
   sendSuccess(res, opp, 'Opportunity loaded')
 }
 
@@ -88,6 +92,7 @@ export async function toggleSave(req: Request, res: Response): Promise<void> {
       entityId:   parsed.data,
       entityType: 'Opportunity',
     })
+    CareerMemorySyncService.syncOpportunityInteraction(userId(req), parsed.data, 'SAVE_OPPORTUNITY');
   }
 
   sendSuccess(res, result, result.saved ? 'Opportunity saved' : 'Opportunity unsaved')
@@ -132,6 +137,8 @@ export async function applyToOpportunity(req: Request, res: Response): Promise<v
     entityType: 'Opportunity',
     metadata:   { mode: 'direct_apply' },
   })
+
+  CareerMemorySyncService.syncOpportunityInteraction(userId(req), parsed.data, 'APPLY_OPPORTUNITY');
 
   sendCreated(res, result, 'Application submitted')
 }

@@ -6,6 +6,7 @@ import { interviewRequestFactoryService } from '../services/interviewRequestFact
 import { interviewContextBuilderService } from '../services/interviewContextBuilder.service';
 import { interviewPlannerService } from '../services/interviewPlanner.service';
 import { competencyGraphService } from '../services/competencyGraph.service';
+import { conversationRuntimeService } from '../services/conversationRuntime.service';
 import { sendSuccess, sendCreated, sendError } from '../utils/apiResponse';
 
 export async function getBriefing(req: Request, res: Response): Promise<void> {
@@ -46,6 +47,25 @@ export async function getPreBriefingPlan(req: Request, res: Response): Promise<v
     sendSuccess(res, plan, 'Pre-interview preparation plan generated');
   } catch (error: any) {
     sendError(res, error.message || 'Failed to generate pre-interview plan', 500);
+  }
+}
+
+export async function processTurn(req: Request, res: Response): Promise<void> {
+  try {
+    const { sessionId, userAnswerText } = req.body;
+    if (!sessionId || !userAnswerText) {
+      sendError(res, 'sessionId and userAnswerText are required', 400);
+      return;
+    }
+
+    const turnResult = await conversationRuntimeService.processTurn({
+      sessionId,
+      userAnswerText,
+    });
+
+    sendSuccess(res, turnResult, 'Conversation turn processed');
+  } catch (error: any) {
+    sendError(res, error.message || 'Failed to process turn', 500);
   }
 }
 

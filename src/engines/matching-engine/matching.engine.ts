@@ -22,6 +22,8 @@ export interface AtsMatchBreakdown {
   sections: AtsSectionDiagnostics;
   matchedKeywords: string[];
   missingKeywords: string[];
+  matchedSkills: string[];
+  missingSkills: string[];
   weakBullets: string[];
   suggestions: string[];
 }
@@ -97,6 +99,8 @@ export class MatchingEngine {
       sections,
       matchedKeywords,
       missingKeywords,
+      matchedSkills,
+      missingSkills,
       weakBullets,
       suggestions,
     };
