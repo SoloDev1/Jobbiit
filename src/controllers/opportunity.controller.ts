@@ -355,8 +355,11 @@ export async function getOpportunityAnalysis(req: Request, res: Response): Promi
   }
 
   try {
-    const analysis = await OpportunityIntelligenceService.getOpportunityAnalysis(idParsed.data)
-    sendSuccess(res, analysis, 'Opportunity analysis loaded')
+    const [analysis, intelligence] = await Promise.all([
+      OpportunityIntelligenceService.getOpportunityAnalysis(idParsed.data),
+      OpportunityIntelligenceService.getOpportunityIntelligence(idParsed.data).catch(() => null),
+    ]);
+    sendSuccess(res, { analysis, intelligence }, 'Opportunity analysis loaded')
   } catch (err: any) {
     sendError(res, err.message || 'Failed to load opportunity analysis', 500, 'ANALYSIS_ERROR')
   }
