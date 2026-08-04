@@ -21,7 +21,9 @@ export type AITask =
   | 'JOB_INTEL_EXTRACT'
   | 'COVER_LETTER_WRITE'
   | 'DOCUMENT_GENERATE'
-  | 'GENERIC_COMPLETION';
+  | 'GENERIC_COMPLETION'
+  | 'INTERVIEW_CLARIFY'
+  | 'INTERVIEW_SMALL_TALK';
 
 export interface AIRouterOptions {
   task: AITask;
@@ -58,6 +60,8 @@ const TASK_CONFIG: Record<AITask, { model: string; temperature: number; maxToken
   COVER_LETTER_WRITE:           { model: 'gpt-4o-mini', temperature: 0.5, maxTokens: 2048, jsonMode: true  },
   DOCUMENT_GENERATE:            { model: 'gpt-4o-mini', temperature: 0.5, maxTokens: 2048, jsonMode: true  },
   GENERIC_COMPLETION:           { model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 1024, jsonMode: false },
+  INTERVIEW_CLARIFY:            { model: 'gpt-4o-mini', temperature: 0.5, maxTokens: 512,  jsonMode: false },
+  INTERVIEW_SMALL_TALK:         { model: 'gpt-4o-mini', temperature: 0.6, maxTokens: 512,  jsonMode: false },
 };
 
 // ─── Router Implementation ────────────────────────────────────────────────────

@@ -241,7 +241,7 @@ export async function getSessionReport(req: Request, res: Response): Promise<voi
 
 export async function getSession(req: Request, res: Response): Promise<void> {
   try {
-    const sessionId = req.params.sessionId;
+    const sessionId = req.params.sessionId as string;
     const session = await interviewRepository.findSessionById(sessionId);
     sendSuccess(res, session, 'Interview session retrieved successfully');
   } catch (error: any) {
