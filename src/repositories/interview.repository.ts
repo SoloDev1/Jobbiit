@@ -1,14 +1,6 @@
 import { prisma } from '../config/db';
 import { NotFoundError } from '../core/errors/domain-error';
-
-export type InterviewPersona = 'FRIENDLY_HR' | 'HIRING_MANAGER' | 'TECHNICAL_LEAD' | 'FAANG_INTERVIEWER' | 'CEO_FOUNDER';
-
-export interface CreateSessionInput {
-  userId: string;
-  opportunityId?: string;
-  persona: InterviewPersona;
-  difficulty?: string;
-}
+import type { CreateSessionInputV3, InterviewPersona, InterviewSourceType, PracticeCategory, CareerStory } from '../types/interview.types';
 
 export interface SaveFeedbackInput {
   sessionId: string;
@@ -36,16 +28,24 @@ export interface CreateFlashcardInput {
 }
 
 export class InterviewRepository {
-  public async createSession(data: CreateSessionInput) {
+  public async createSession(data: CreateSessionInputV3) {
     return prisma.interviewSession.create({
       data: {
         userId: data.userId,
+        sourceType: (data.sourceType as any) || 'OPPORTUNITY',
         opportunityId: data.opportunityId || undefined,
-        persona: data.persona,
+        rawInputText: data.rawInputText || undefined,
+        sourceUrl: data.sourceUrl || undefined,
+        extractedCompany: data.extractedCompany || undefined,
+        extractedRole: data.extractedRole || undefined,
+        extractedLevel: data.extractedLevel || undefined,
+        practiceCategory: (data.practiceCategory as any) || undefined,
+        persona: (data.persona as any) || 'HIRING_MANAGER',
         difficulty: data.difficulty || 'INTERMEDIATE',
       },
       include: {
         feedbacks: true,
+        opportunity: true,
       },
     });
   }
@@ -89,6 +89,29 @@ export class InterviewRepository {
     });
 
     return feedback;
+  }
+
+  public async saveUserStory(data: Omit<CareerStory, 'id' | 'createdAt'>) {
+    return (prisma as any).userStory.create({
+      data: {
+        userId: data.userId,
+        title: data.title,
+        situation: data.situation,
+        task: data.task,
+        action: data.action,
+        result: data.result,
+        metrics: data.metrics || [],
+        technologies: data.technologies || [],
+        tags: data.tags || [],
+      },
+    });
+  }
+
+  public async getUserStories(userId: string) {
+    return (prisma as any).userStory.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   public async saveFlashcard(data: CreateFlashcardInput) {

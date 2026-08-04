@@ -1,13 +1,21 @@
 import { OpportunityIntelligenceService } from '../../services/opportunityIntelligence.service';
 import { profileRepository } from '../../repositories/profile.repository';
 import { interviewRepository } from '../../repositories/interview.repository';
+import { interviewContextBuilderService } from '../../services/interviewContextBuilder.service';
+import { starEvaluator } from './evaluators/star.evaluator';
+import { leadershipEvaluator } from './evaluators/leadership.evaluator';
+import { technicalEvaluator } from './evaluators/technical.evaluator';
+import { hireSignalEvaluator } from './evaluators/hire-signal.evaluator';
 import { logger } from '../../core/telemetry/logger.service';
 
 export type InterviewPersona = 'FRIENDLY_HR' | 'HIRING_MANAGER' | 'TECHNICAL_LEAD' | 'FAANG_INTERVIEWER' | 'CEO_FOUNDER';
 
 export interface BriefingInput {
   userId: string;
-  opportunityId: string;
+  opportunityId?: string;
+  sourceType?: string;
+  company?: string;
+  role?: string;
 }
 
 export interface EvaluateAnswerInput {
@@ -18,21 +26,37 @@ export interface EvaluateAnswerInput {
 
 export class InterviewCoachEngine {
   /**
-   * Generates AI Briefing for an opportunity interview mission.
+   * Generates AI Briefing for any of the 4 interview entry sources.
    */
   public async getBriefing(input: BriefingInput) {
-    logger.info({ ...input, service: 'InterviewCoachEngine' }, 'Generating Interview Briefing');
+    logger.info({ ...input, service: 'InterviewCoachEngine' }, 'Generating Mission Briefing');
 
-    const analysis = await OpportunityIntelligenceService.getOpportunityAnalysis(input.opportunityId);
-    const profile = await profileRepository.findByUserId(input.userId);
+    let questions: string[] = [];
+    let skillsToFocus: string[] = ['Problem Solving', 'STAR Storytelling', 'Technical Leadership'];
+    let difficulty = 'INTERMEDIATE';
+    let companyName = input.company || 'Target Organization';
 
-    const questions = analysis.interviewQuestions || [];
-    const skillsToFocus = (analysis.requiredSkills || []).slice(0, 5);
+    if (input.opportunityId) {
+      const analysis = await OpportunityIntelligenceService.getOpportunityAnalysis(input.opportunityId).catch(() => null);
+      if (analysis) {
+        questions = analysis.interviewQuestions || [];
+        skillsToFocus = (analysis.requiredSkills || []).slice(0, 5);
+        difficulty = analysis.careerLevel || 'INTERMEDIATE';
+      }
+    }
+
+    if (questions.length === 0) {
+      questions = [
+        `Looking at the role at ${companyName}, describe a time when you resolved a complex technical or architectural challenge under a tight deadline.`,
+        `Why do you want to join our organization, and what specific strategic value do you bring to this position?`,
+        `Describe a key project where you demonstrated ownership, aligned stakeholders, and measured quantitative impact.`
+      ];
+    }
 
     return {
       opportunityId: input.opportunityId,
       estimatedTimeMinutes: 18,
-      difficulty: analysis.careerLevel || 'INTERMEDIATE',
+      difficulty,
       overallReadinessScore: 82,
       focusTopics: skillsToFocus,
       likelyQuestions: questions,
@@ -47,32 +71,37 @@ export class InterviewCoachEngine {
   }
 
   /**
-   * Evaluates user's answer against the STAR Framework (Situation, Task, Action, Result).
+   * Evaluates user's answer using the Evaluator Plugin Suite.
    */
   public async evaluateAnswer(input: EvaluateAnswerInput) {
     const { sessionId, questionText, answerText } = input;
-    const lower = answerText.toLowerCase();
 
-    const situationOk = lower.includes('when') || lower.includes('project') || lower.includes('team') || lower.includes('at ');
-    const taskOk = lower.includes('goal') || lower.includes('needed to') || lower.includes('task') || lower.includes('responsible');
-    const actionOk = lower.includes('built') || lower.includes('implemented') || lower.includes('designed') || lower.includes('led') || lower.includes('i ');
-    const metricsFound = /\d+%|\$\d+|\d+x|\d+ users|\d+ms/i.test(answerText);
-    const resultOk = metricsFound || lower.includes('result') || lower.includes('outcome') || lower.includes('increased');
+    const session: any = await interviewRepository.findSessionById(sessionId).catch(() => null);
 
-    let score = 50;
-    if (situationOk) score += 12;
-    if (taskOk) score += 12;
-    if (actionOk) score += 13;
-    if (resultOk) score += 13;
+    // Build synthetic CareerContext for evaluation engine
+    const careerContext = await interviewContextBuilderService.buildContext({
+      userId: session?.userId || 'user_anon',
+      sourceType: session?.sourceType || 'OPPORTUNITY',
+      opportunityId: session?.opportunityId || undefined,
+      extractedCompany: session?.extractedCompany || undefined,
+      extractedRole: session?.extractedRole || undefined,
+      persona: session?.persona || 'HIRING_MANAGER',
+    });
 
-    let coachingTip = 'Good structure!';
-    if (!resultOk) {
-      coachingTip = 'Try adding measurable impact (e.g. "improved latency by 35%").';
-    } else if (!actionOk) {
-      coachingTip = 'Focus more on your direct actions rather than team-level descriptions.';
-    }
+    // Run Evaluator Suite
+    const starRes = await starEvaluator.evaluate(careerContext, questionText, answerText);
+    const leadRes = await leadershipEvaluator.evaluate(careerContext, questionText, answerText);
+    const techRes = await technicalEvaluator.evaluate(careerContext, questionText, answerText);
 
-    const improvedAnswer = `${answerText.trim()} This initiative directly resulted in a 30% increase in performance metrics and team efficiency.`;
+    const overall = hireSignalEvaluator.computeOverallHireSignal([starRes, leadRes, techRes]);
+
+    const situationOk = starRes.detectedSignals.includes('Situation Defined');
+    const taskOk = starRes.detectedSignals.includes('Task Goal Outlined');
+    const actionOk = starRes.detectedSignals.includes('Direct Action Taken');
+    const resultOk = starRes.detectedSignals.includes('Outcome & Impact');
+    const metricsFound = starRes.detectedSignals.includes('Quantifiable Metrics Found');
+
+    const improvedAnswer = `${answerText.trim()} This initiative directly resulted in a 30% increase in system performance metrics and team delivery velocity.`;
 
     const feedback = await interviewRepository.saveFeedback({
       sessionId,
@@ -83,10 +112,25 @@ export class InterviewCoachEngine {
       actionOk,
       resultOk,
       metricsFound,
-      score,
-      coachingTip,
+      score: overall.overallScore,
+      coachingTip: overall.summaryTip,
       improvedAnswer,
     });
+
+    // Automatically auto-extract strong answers (Score >= 80) into Candidate's Story Library
+    if (overall.overallScore >= 80 && session?.userId) {
+      await interviewRepository.saveUserStory({
+        userId: session.userId,
+        title: `Story: ${questionText.slice(0, 30)}...`,
+        situation: answerText.slice(0, 150),
+        task: 'Drive technical execution',
+        action: answerText.slice(0, 200),
+        result: 'Achieved quantitative performance boost',
+        metrics: metricsFound ? ['30% metric boost'] : [],
+        technologies: careerContext.jobIntelligence.requiredSkills,
+        tags: ['auto-extracted', 'high-score'],
+      }).catch(() => null);
+    }
 
     return feedback;
   }

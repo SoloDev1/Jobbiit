@@ -1169,23 +1169,70 @@ enum InterviewPersona {
   CEO_FOUNDER
 }
 
-model InterviewSession {
-  id            String             @id @default(uuid())
-  userId        String
-  opportunityId String?
-  persona       InterviewPersona   @default(HIRING_MANAGER)
-  difficulty    String             @default("INTERMEDIATE") // BEGINNER, INTERMEDIATE, ADVANCED
-  readinessScore Int               @default(75)
-  starScore     Int                @default(80)
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+enum InterviewSourceType {
+  OPPORTUNITY
+  CUSTOM_TEXT
+  CUSTOM_URL
+  CUSTOM_FILE
+  CUSTOM_EMAIL
+  PRACTICE
+}
 
-  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  opportunity   Opportunity?       @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
-  feedbacks     InterviewFeedback[]
+enum PracticeCategory {
+  BEHAVIORAL
+  TECHNICAL
+  SYSTEM_DESIGN
+  LEADERSHIP
+  COMMUNICATION
+  PRODUCT
+  HR
+  GRADUATE
+  VISA
+  SCHOLARSHIP
+}
+
+model UserStory {
+  id           String   @id @default(uuid())
+  userId       String
+  title        String
+  situation    String   @db.Text
+  task         String   @db.Text
+  action       String   @db.Text
+  result       String   @db.Text
+  metrics      String[] @default([])
+  technologies String[] @default([])
+  tags         String[] @default([])
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model InterviewSession {
+  id               String              @id @default(uuid())
+  userId           String
+  sourceType       InterviewSourceType @default(OPPORTUNITY)
+  opportunityId    String?
+  rawInputText     String?             @db.Text
+  sourceUrl        String?
+  extractedCompany String?
+  extractedRole    String?
+  extractedLevel   String?
+  practiceCategory PracticeCategory?
+  persona          InterviewPersona    @default(HIRING_MANAGER)
+  difficulty       String              @default("INTERMEDIATE") // BEGINNER, INTERMEDIATE, ADVANCED
+  readinessScore   Int                 @default(75)
+  starScore        Int                 @default(80)
+  sessionReplay    Json?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity      Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  feedbacks        InterviewFeedback[]
 
   @@index([userId])
   @@index([opportunityId])
+  @@index([sourceType])
 }
 
 model InterviewFeedback {
