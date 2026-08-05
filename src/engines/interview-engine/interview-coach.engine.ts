@@ -1,7 +1,7 @@
 import { OpportunityIntelligenceService } from '../../services/opportunityIntelligence.service';
 import { profileRepository } from '../../repositories/profile.repository';
 import { interviewRepository } from '../../repositories/interview.repository';
-import { interviewContextBuilderService } from '../../services/interviewContextBuilder.service';
+import { interviewContextBuilderService } from '../../services/contextBuilder.service';
 import { starEvaluator } from './evaluators/star.evaluator';
 import { leadershipEvaluator } from './evaluators/leadership.evaluator';
 import { technicalEvaluator } from './evaluators/technical.evaluator';
@@ -25,6 +25,7 @@ export interface EvaluateAnswerInput {
   sessionId: string;
   questionText: string;
   answerText: string;
+  userId: string;
 }
 
 export class InterviewCoachEngine {
@@ -82,43 +83,32 @@ export class InterviewCoachEngine {
     };
   }
 
-  /**
-   * Evaluates user's answer using the LLM-graded Evaluator Suite.
-   * Generates a real AI-improved answer instead of a hardcoded string.
-   */
   public async evaluateAnswer(input: EvaluateAnswerInput) {
-    const { sessionId, questionText, answerText } = input;
+    logger.info({ sessionId: input.sessionId, service: 'InterviewCoachEngine' }, 'Evaluating Candidate Answer');
 
-    const session: any = await interviewRepository.findSessionById(sessionId).catch(() => null);
-    const persona: InterviewPersona = (session?.persona || 'HIRING_MANAGER') as InterviewPersona;
+    const { sessionId, questionText, answerText, userId } = input;
+    const session = await interviewRepository.findSessionById(sessionId, userId);
 
-    // Build unified CareerContext for evaluation engine
-    const careerContext = await interviewContextBuilderService.buildContext({
-      userId: session?.userId || 'user_anon',
-      sourceType: session?.sourceType || 'OPPORTUNITY',
-      opportunityId: session?.opportunityId || undefined,
-      extractedCompany: session?.extractedCompany || undefined,
-      extractedRole: session?.extractedRole || undefined,
-      persona,
+    const feedbacks = session.feedbacks || [];
+    const historyText = feedbacks.map((f: any) => `Interviewer: ${f.questionText}\nCandidate: ${f.answerText}`).join('\n\n');
+
+    const response = await aiRouter.complete({
+      task: 'ANSWER_EVALUATE_UNIFIED',
+      systemPrompt: PromptLibrary.EVAL_UNIFIED_v1.systemPrompt,
+      userPrompt: PromptLibrary.EVAL_UNIFIED_v1.buildUserPrompt(questionText, answerText, historyText),
+      jsonMode: true,
     });
 
-    // Run LLM-graded Evaluator Suite in parallel
-    const [starRes, leadRes, techRes] = await Promise.all([
-      starEvaluator.evaluate(careerContext, questionText, answerText),
-      leadershipEvaluator.evaluate(careerContext, questionText, answerText),
-      technicalEvaluator.evaluate(careerContext, questionText, answerText),
-    ]);
+    const evalResult = aiRouter.parseJSON<any>(response);
 
-    const overall = hireSignalEvaluator.computeOverallHireSignal([starRes, leadRes, techRes], persona);
-
-    const situationOk = starRes.detectedSignals.includes('Situation Defined');
-    const taskOk = starRes.detectedSignals.includes('Task Goal Outlined');
-    const actionOk = starRes.detectedSignals.includes('Direct Action Taken');
-    const resultOk = starRes.detectedSignals.includes('Outcome & Impact');
-    const metricsFound = starRes.detectedSignals.includes('Quantifiable Metrics Found');
-
-    // Generate real AI-improved answer
-    const improvedAnswer = await this.generateImprovedAnswer(questionText, answerText);
+    const situationOk = evalResult.star?.situationOk || false;
+    const taskOk = evalResult.star?.taskOk || false;
+    const actionOk = evalResult.star?.actionOk || false;
+    const resultOk = evalResult.star?.resultOk || false;
+    const metricsFound = evalResult.star?.metricsFound || false;
+    const overallScore = evalResult.overallScore || 70;
+    const coachingTip = evalResult.coachingTip || 'Refine your STAR response.';
+    const improvedAnswer = evalResult.improvedAnswer || answerText;
 
     const feedback = await interviewRepository.saveFeedback({
       sessionId,
@@ -129,32 +119,39 @@ export class InterviewCoachEngine {
       actionOk,
       resultOk,
       metricsFound,
-      score: overall.overallScore,
-      coachingTip: overall.summaryTip,
+      score: overallScore,
+      coachingTip,
       improvedAnswer,
     });
 
     // Auto-extract high-scoring answers (>= 80) into the Candidate Story Library
-    if (overall.overallScore >= 80 && session?.userId) {
-      const starHint = (starRes as any).improvedAnswerHint || '';
+    if (overallScore >= 80) {
+      const careerContext = await interviewContextBuilderService.buildContext({
+        userId,
+        sourceType: (session.sourceType as any) || 'OPPORTUNITY',
+        opportunityId: session.opportunityId || undefined,
+        extractedCompany: session.extractedCompany || undefined,
+        extractedRole: session.extractedRole || undefined,
+      });
+
       await interviewRepository.saveUserStory({
-        userId: session.userId,
+        userId,
         title: `Story: ${questionText.slice(0, 50)}...`,
         situation: answerText.slice(0, 200),
         task: 'Deliver measurable technical or business outcome',
         action: answerText.slice(0, 300),
-        result: starHint || 'Achieved measurable positive impact',
-        metrics: metricsFound ? [starRes.detectedSignals.find((s) => s.includes('Metric')) || 'Quantified impact'] : [],
+        result: coachingTip || 'Achieved measurable positive impact',
+        metrics: metricsFound ? ['Quantified impact'] : [],
         technologies: careerContext.jobIntelligence.requiredSkills.slice(0, 4),
-        tags: ['auto-extracted', 'high-score', `score-${overall.overallScore}`],
+        tags: ['auto-extracted', 'high-score', `score-${overallScore}`],
       }).catch(() => null);
     }
 
     return {
       ...feedback,
-      hireRecommendation: overall.hireRecommendation,
-      strengthSummary: overall.strengthSummary,
-      confidence: overall.confidence,
+      hireRecommendation: evalResult.hireSignal || 'YES',
+      strengthSummary: evalResult.strengthObserved || '',
+      confidence: 'HIGH',
     };
   }
 

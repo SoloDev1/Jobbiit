@@ -46,6 +46,8 @@ import documentV2Routes       from './routes/document-v2.routes'
 import workspaceV2Routes      from './routes/workspace-v2.routes'
 import interviewRoutes        from './routes/interview.routes'
 import analyticsRoutes        from './routes/analytics.routes'
+import documentStudioRoutes   from './routes/document-studio.routes'
+import interviewStudioRoutes  from './routes/interview-studio.routes'
 import { initWorker, registerCronJobs } from './modules/document-generator/document-generator.queue'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -162,6 +164,10 @@ app.use('/api/chatbot', chatbotRoutes)
 app.use('/api/templates', templateRoutes)
 app.use('/api/v1/ai', authenticate, aiRoutes)
 app.use('/api/ai', authenticate, aiRoutes)
+
+// ─── Studio API routes (Document Studio & Interview Studio MVP Launch) ─────
+app.use('/api/v1/studio/documents', documentStudioRoutes)
+app.use('/api/v1/studio/interview', interviewStudioRoutes)
 
 // ─── V2 API routes (resource-oriented) ─────────────────────────────────────
 app.use('/api/v2/profile',     authenticate, profileV2Routes)

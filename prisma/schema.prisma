@@ -273,6 +273,10 @@ model User {
   interviewSessions    InterviewSession[]
   flashcards           Flashcard[]
 
+  studioDocuments         StudioDocument[]
+  studioInterviewSessions StudioInterviewSession[]
+  aiGenerationLogs        AiGenerationLog[]
+
   @@index([role])
 }
 
@@ -1257,8 +1261,8 @@ model InterviewSession {
   practiceCategory PracticeCategory?
   persona          InterviewPersona    @default(HIRING_MANAGER)
   difficulty       String              @default("INTERMEDIATE") // BEGINNER, INTERMEDIATE, ADVANCED
-  readinessScore   Int                 @default(75)
-  starScore        Int                 @default(80)
+  readinessScore   Int?
+  starScore        Int?
   sessionReplay    Json?
   conversationState Json?
   createdAt        DateTime            @default(now())
@@ -1279,8 +1283,8 @@ model InterviewFeedback {
   session       InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   questionText  String
   answerText    String
-  situationOk   Boolean          @default(true)
-  taskOk        Boolean          @default(true)
+  situationOk   Boolean          @default(false)
+  taskOk        Boolean          @default(false)
   actionOk      Boolean          @default(false)
   resultOk      Boolean          @default(false)
   metricsFound  Boolean          @default(false)
@@ -1309,4 +1313,64 @@ model Flashcard {
 
   @@index([userId])
   @@index([opportunityId])
+}
+
+// ─────────────────────────────────────────
+// DOCUMENT STUDIO & INTERVIEW STUDIO (MVP LAUNCH)
+// ─────────────────────────────────────────
+
+model StudioDocument {
+  id                    String   @id @default(uuid())
+  userId                String
+  title                 String
+  documentType          String   // RESUME, COVER_LETTER, SOP, PERSONAL_STATEMENT, SCHOLARSHIP_ESSAY, MOTIVATION_LETTER, GRANT_PROPOSAL, RECOMMENDATION_LETTER, PROFESSIONAL_EMAIL, LINKEDIN_SUMMARY
+  targetOpportunityText String?  @db.Text
+  templateId            String   @default("professional") // professional, modern, minimal
+  
+  sections              Json     // Array of { id, title, type, content, isHidden, isComplete, order }
+  settings              Json     // { fontFamily, fontSize, primaryColor }
+  aiHistory             Json?    // Array of recent AI transformations for reversion
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs                  AiGenerationLog[]
+
+  @@index([userId])
+  @@index([documentType])
+}
+
+model StudioInterviewSession {
+  id                    String   @id @default(uuid())
+  userId                String
+  category              String
+  targetOpportunityText String?  @db.Text
+  history               Json     // Array of { role: "assistant" | "user", content: string, feedback?: object }
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AiGenerationLog {
+  id               String   @id @default(uuid())
+  userId           String
+  documentId       String?
+  action           String   // FULL_GENERATE, SECTION_IMPROVE, SECTION_REWRITE, SECTION_SHORTEN, SECTION_EXPAND, SECTION_ATS, INTERVIEW_TURN
+  documentType     String?
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  durationMs       Int      @default(0)
+  status           String   // SUCCESS, FAILED
+  errorMessage     String?
+
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document         StudioDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
+
+  @@index([userId])
+  @@index([action])
 }

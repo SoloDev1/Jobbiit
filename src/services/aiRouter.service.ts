@@ -23,7 +23,11 @@ export type AITask =
   | 'DOCUMENT_GENERATE'
   | 'GENERIC_COMPLETION'
   | 'INTERVIEW_CLARIFY'
-  | 'INTERVIEW_SMALL_TALK';
+  | 'INTERVIEW_SMALL_TALK'
+  | 'ANSWER_EVALUATE_UNIFIED'
+  | 'INTERVIEW_STREAM_REPLY'
+  | 'INTERVIEW_ROUTE'
+  | 'INTERVIEW_RESPOND';
 
 export interface AIRouterOptions {
   task: AITask;
@@ -62,6 +66,10 @@ const TASK_CONFIG: Record<AITask, { model: string; temperature: number; maxToken
   GENERIC_COMPLETION:           { model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 1024, jsonMode: false },
   INTERVIEW_CLARIFY:            { model: 'gpt-4o-mini', temperature: 0.5, maxTokens: 512,  jsonMode: false },
   INTERVIEW_SMALL_TALK:         { model: 'gpt-4o-mini', temperature: 0.6, maxTokens: 512,  jsonMode: false },
+  ANSWER_EVALUATE_UNIFIED:      { model: 'gpt-4o-mini', temperature: 0.1, maxTokens: 1536, jsonMode: true  },
+  INTERVIEW_STREAM_REPLY:       { model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 512,  jsonMode: false },
+  INTERVIEW_ROUTE:              { model: 'gpt-4o-mini', temperature: 0.1, maxTokens: 250,  jsonMode: true  },
+  INTERVIEW_RESPOND:            { model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 512,  jsonMode: false },
 };
 
 // ─── Router Implementation ────────────────────────────────────────────────────

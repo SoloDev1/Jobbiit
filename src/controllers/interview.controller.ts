@@ -3,15 +3,30 @@ import { interviewCoachEngine } from '../engines/interview-engine/interview-coac
 import { jobIntelligenceEngine } from '../engines/interview-engine/job-intelligence.engine';
 import { interviewRepository } from '../repositories/interview.repository';
 import { interviewRequestFactoryService } from '../services/interviewRequestFactory.service';
-import { interviewContextBuilderService } from '../services/interviewContextBuilder.service';
+import { interviewContextBuilderService } from '../services/contextBuilder.service';
 import { interviewPlannerService } from '../services/interviewPlanner.service';
 import { competencyGraphService } from '../services/competencyGraph.service';
 import { conversationRuntimeService } from '../services/conversationRuntime.service';
 import { sendSuccess, sendCreated, sendError } from '../utils/apiResponse';
+import { ValidationError, NotFoundError, ForbiddenError } from '../core/errors/domain-error';
+import { logger } from '../core/telemetry/logger.service';
+
+function handleError(res: Response, error: any) {
+  if (error instanceof ValidationError) {
+    sendError(res, error.message, 400);
+  } else if (error instanceof ForbiddenError) {
+    sendError(res, error.message, 403);
+  } else if (error instanceof NotFoundError) {
+    sendError(res, error.message, 404);
+  } else {
+    logger.error({ err: error }, 'Unhandled error in interview controller');
+    sendError(res, error.message || 'An internal server error occurred', 500);
+  }
+}
 
 export async function getBriefing(req: Request, res: Response): Promise<void> {
   try {
-    const userId = req.user?.id || (req.query.userId as string);
+    const userId = req.user!.id;
     const opportunityId = (req.query.opportunityId as string) || (req.params.opportunityId as string);
     const company = req.query.company as string;
     const role = req.query.role as string;
@@ -24,16 +39,16 @@ export async function getBriefing(req: Request, res: Response): Promise<void> {
     });
     sendSuccess(res, briefing, 'Interview briefing generated');
   } catch (error: any) {
-    sendError(res, error.message || 'Failed to generate briefing', 500);
+    handleError(res, error);
   }
 }
 
 export async function getPreBriefingPlan(req: Request, res: Response): Promise<void> {
   try {
-    const userId = req.user?.id || (req.query.userId as string);
+    const userId = req.user!.id;
     const opportunityId = req.query.opportunityId as string;
-    const company = (req.query.company as string) || 'Stripe';
-    const role = (req.query.role as string) || 'Senior Backend Engineer';
+    const company = req.query.company as string;
+    const role = req.query.role as string;
 
     const context = await interviewContextBuilderService.buildContext({
       userId,
@@ -46,7 +61,7 @@ export async function getPreBriefingPlan(req: Request, res: Response): Promise<v
     const plan = await interviewPlannerService.planInterview(context);
     sendSuccess(res, plan, 'Pre-interview preparation plan generated');
   } catch (error: any) {
-    sendError(res, error.message || 'Failed to generate pre-interview plan', 500);
+    handleError(res, error);
   }
 }
 
@@ -58,35 +73,79 @@ export async function processTurn(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    const userId = req.user!.id;
+
     const turnResult = await conversationRuntimeService.processTurn({
       sessionId,
       userAnswerText,
+      userId,
     });
 
     sendSuccess(res, turnResult, 'Conversation turn processed');
   } catch (error: any) {
-    sendError(res, error.message || 'Failed to process turn', 500);
+    handleError(res, error);
+  }
+}
+
+export async function processTurnStream(req: Request, res: Response): Promise<void> {
+  const { sessionId, userAnswerText } = req.body;
+  if (!sessionId || !userAnswerText) {
+    sendError(res, 'sessionId and userAnswerText are required', 400);
+    return;
+  }
+
+  const userId = req.user!.id;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  try {
+    let accumulatedText = "";
+    let finalDecision: any = undefined;
+    const iterator = conversationRuntimeService.streamReply({ sessionId, userAnswerText, userId });
+
+    while (true) {
+      const { value, done } = await iterator.next();
+      if (done) {
+        finalDecision = value;
+        break;
+      }
+      accumulatedText += value;
+      res.write(`data: ${JSON.stringify({ delta: value })}\n\n`);
+    }
+
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
+
+    conversationRuntimeService.gradeAndPersistTurn(
+      { sessionId, userAnswerText, userId },
+      accumulatedText,
+      finalDecision || undefined
+    ).catch((err) => {
+      logger.error({ err, sessionId }, 'Background turn grading failed');
+    });
+  } catch (err: any) {
+    logger.error({ err, sessionId }, 'Streamed turn processing failed');
+    res.write(`data: ${JSON.stringify({ error: err.message || 'Stream generation failed' })}\n\n`);
+    res.end();
   }
 }
 
 export async function getCompetencyGraph(req: Request, res: Response): Promise<void> {
   try {
-    const userId = req.user?.id || (req.query.userId as string);
-    if (!userId) {
-      sendError(res, 'userId is required', 400);
-      return;
-    }
-
+    const userId = req.user!.id;
     const graph = await competencyGraphService.getCompetencyGraph(userId);
     sendSuccess(res, graph, 'Candidate competency graph loaded');
   } catch (error: any) {
-    sendError(res, error.message || 'Failed to fetch competency graph', 500);
+    handleError(res, error);
   }
 }
 
 export async function ingestJob(req: Request, res: Response): Promise<void> {
   try {
-    const userId = req.user?.id || req.body.userId;
+    const userId = req.user!.id;
     const { sourceType, inputText, jobUrl, emailText, company, role } = req.body;
 
     const intel = await jobIntelligenceEngine.ingestJob({
@@ -101,13 +160,13 @@ export async function ingestJob(req: Request, res: Response): Promise<void> {
 
     sendSuccess(res, intel, 'Job intelligence extracted');
   } catch (error: any) {
-    sendError(res, error.message || 'Failed to ingest job', 500);
+    handleError(res, error);
   }
 }
 
 export async function createSession(req: Request, res: Response): Promise<void> {
   try {
-    const userId = req.user?.id || req.body.userId;
+    const userId = req.user!.id;
     const input = interviewRequestFactoryService.createInputFromRequest(req.body, userId);
 
     const session: any = await interviewRepository.createSession(input);
@@ -122,8 +181,8 @@ export async function createSession(req: Request, res: Response): Promise<void> 
         extractedRole: input.extractedRole,
       });
 
-      const companyName = context.jobIntelligence?.companyName || input.extractedCompany || 'Target Company';
-      const roleTitle = context.jobIntelligence?.roleTitle || input.extractedRole || 'Target Role';
+      const companyName = context.jobIntelligence?.companyName || input.extractedCompany;
+      const roleTitle = context.jobIntelligence?.roleTitle || input.extractedRole;
       initialQuestion = `Welcome to your interview for ${roleTitle} at ${companyName}. To get started, please tell me about your background and how your key skills align with this position.`;
     } catch (err: any) {}
 
@@ -146,7 +205,7 @@ export async function createSession(req: Request, res: Response): Promise<void> 
 
     sendCreated(res, session, 'Interview session initialized');
   } catch (error: any) {
-    sendError(res, error.message || 'Failed to create session', 500);
+    handleError(res, error);
   }
 }
 
@@ -158,53 +217,47 @@ export async function evaluateAnswer(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const feedback = await interviewCoachEngine.evaluateAnswer({ sessionId, questionText, answerText });
+    const userId = req.user!.id;
+
+    const feedback = await interviewCoachEngine.evaluateAnswer({ sessionId, questionText, answerText, userId });
     sendSuccess(res, feedback, 'STAR feedback evaluated');
   } catch (error: any) {
-    sendError(res, error.message || 'Failed to evaluate answer', 500);
+    handleError(res, error);
   }
 }
 
 export async function getUserStories(req: Request, res: Response): Promise<void> {
   try {
-    const userId = req.user?.id || (req.query.userId as string);
-    if (!userId) {
-      sendError(res, 'userId is required', 400);
-      return;
-    }
-
+    const userId = req.user!.id;
     const stories = await interviewRepository.getUserStories(userId);
     sendSuccess(res, stories, 'Candidate stories retrieved');
   } catch (error: any) {
-    sendError(res, error.message || 'Failed to fetch stories', 500);
+    handleError(res, error);
   }
 }
 
 export async function getFlashcards(req: Request, res: Response): Promise<void> {
   try {
-    const userId = req.user?.id || (req.query.userId as string);
+    const userId = req.user!.id;
     const opportunityId = req.query.opportunityId as string;
 
     const cards = await interviewRepository.findFlashcards(userId, opportunityId);
     sendSuccess(res, cards, 'Personalized flashcards loaded');
   } catch (error: any) {
-    sendError(res, error.message || 'Failed to fetch flashcards', 500);
+    handleError(res, error);
   }
 }
 
 export async function getSessionReport(req: Request, res: Response): Promise<void> {
   try {
-        const sessionId = req.params.sessionId as string;
+    const sessionId = req.params.sessionId as string;
     if (!sessionId) {
       sendError(res, 'sessionId is required', 400);
       return;
     }
 
-    const session = await interviewRepository.findSessionById(sessionId);
-    if (!session) {
-      sendError(res, 'Interview session not found', 404);
-      return;
-    }
+    const userId = req.user!.id;
+    const session = await interviewRepository.findSessionById(sessionId, userId);
 
     const feedbacks = session.feedbacks || [];
     const totalTurns = feedbacks.length;
@@ -235,16 +288,17 @@ export async function getSessionReport(req: Request, res: Response): Promise<voi
 
     sendSuccess(res, report, 'Interview report compiled');
   } catch (error: any) {
-    sendError(res, error.message || 'Failed to fetch session report', 500);
+    handleError(res, error);
   }
 }
 
 export async function getSession(req: Request, res: Response): Promise<void> {
   try {
     const sessionId = req.params.sessionId as string;
-    const session = await interviewRepository.findSessionById(sessionId);
+    const userId = req.user!.id;
+    const session = await interviewRepository.findSessionById(sessionId, userId);
     sendSuccess(res, session, 'Interview session retrieved successfully');
   } catch (error: any) {
-    sendError(res, error.message || 'Failed to retrieve interview session', 500);
+    handleError(res, error);
   }
 }

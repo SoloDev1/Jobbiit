@@ -1,5 +1,5 @@
 import { prisma } from '../config/db';
-import { NotFoundError } from '../core/errors/domain-error';
+import { NotFoundError, ForbiddenError } from '../core/errors/domain-error';
 import type { CreateSessionInputV3, InterviewPersona, InterviewSourceType, PracticeCategory, CareerStory } from '../types/interview.types';
 
 export interface SaveFeedbackInput {
@@ -60,11 +60,13 @@ export class InterviewRepository {
     });
   }
 
-  public async findSessionById(id: string) {
+  public async findSessionById(id: string, userId: string) {
     const session = await prisma.interviewSession.findUnique({
       where: { id },
       include: {
-        feedbacks: true,
+        feedbacks: {
+          orderBy: { createdAt: 'asc' },
+        },
         opportunity: true,
       },
     });
@@ -73,32 +75,36 @@ export class InterviewRepository {
       throw new NotFoundError(`Interview session not found: ${id}`);
     }
 
+    if (session.userId !== userId) {
+      throw new ForbiddenError(`Not your session`);
+    }
+
     return session;
   }
 
   public async saveFeedback(data: SaveFeedbackInput) {
-    const feedback = await prisma.interviewFeedback.create({
-      data,
+    return prisma.$transaction(async (tx) => {
+      const feedback = await tx.interviewFeedback.create({
+        data,
+      });
+
+      const agg = await tx.interviewFeedback.aggregate({
+        where: { sessionId: data.sessionId },
+        _avg: { score: true },
+      });
+
+      const avgScore = Math.round(agg._avg.score ?? data.score);
+
+      await tx.interviewSession.update({
+        where: { id: data.sessionId },
+        data: {
+          readinessScore: avgScore,
+          starScore: avgScore,
+        },
+      });
+
+      return feedback;
     });
-
-    // Update overall session readiness and STAR score
-    const feedbacks = await prisma.interviewFeedback.findMany({
-      where: { sessionId: data.sessionId },
-    });
-
-    const avgScore = Math.round(
-      feedbacks.reduce((acc: number, curr: { score: number }) => acc + curr.score, 0) / (feedbacks.length || 1)
-    );
-
-    await prisma.interviewSession.update({
-      where: { id: data.sessionId },
-      data: {
-        readinessScore: avgScore,
-        starScore: avgScore,
-      },
-    });
-
-    return feedback;
   }
 
   public async saveUserStory(data: Omit<CareerStory, 'id' | 'createdAt'>) {
@@ -145,7 +151,9 @@ export class InterviewRepository {
       where: { userId },
       orderBy: { createdAt: 'desc' },
       include: {
-        feedbacks: true,
+        feedbacks: {
+          orderBy: { createdAt: 'asc' },
+        },
         opportunity: true,
       },
     });
