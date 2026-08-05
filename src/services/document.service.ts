@@ -16,11 +16,11 @@ export class DocumentService {
     targetOpportunityText?: string
   ) {
     const startTime = Date.now();
-    const { systemPrompt, userPrompt } = buildDocumentGenerationPrompt({
+    const { systemPrompt, userPrompt } = buildDocumentGenerationPrompt(
       documentType,
       formData,
-      targetOpportunityText,
-    });
+      targetOpportunityText
+    );
 
     let completion: any;
     let durationMs = 0;

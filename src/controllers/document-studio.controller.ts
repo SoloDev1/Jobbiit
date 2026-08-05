@@ -7,25 +7,23 @@ const parseStringParam = (param: any): string => {
   return typeof param === 'string' ? param : String(param || '');
 };
 
+import { GenerateDocumentSchema } from '../schemas/document-studio.schema';
+
 export async function generateDocument(req: Request, res: Response) {
   try {
     const userId = req.user!.id;
-    const { documentType, formData, targetOpportunityText } = req.body;
-
-    if (!documentType || !formData) {
-      return res.status(400).json({ success: false, message: 'documentType and formData are required' });
-    }
+    const validated = GenerateDocumentSchema.parse(req.body);
 
     const document = await DocumentService.generateDocument(
       userId,
-      parseStringParam(documentType),
-      formData,
-      targetOpportunityText ? parseStringParam(targetOpportunityText) : undefined
+      validated.documentType,
+      validated.formData,
+      validated.targetOpportunityText
     );
 
     return res.status(201).json({ success: true, data: document });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(400).json({ success: false, message: error.message });
   }
 }
 

@@ -1,40 +1,42 @@
-export interface DocumentGenInput {
-  documentType: string;
-  formData: Record<string, any>;
-  targetOpportunityText?: string;
-}
+import { buildResumePrompt } from './resume.prompt';
+import { buildSopPrompt } from './sop.prompt';
 
-export function buildDocumentGenerationPrompt(input: DocumentGenInput): { systemPrompt: string; userPrompt: string } {
-  const { documentType, formData, targetOpportunityText } = input;
+export function buildDocumentGenerationPrompt(
+  documentType: string,
+  formData: Record<string, any>,
+  targetOpportunityText: string = ''
+) {
+  if (documentType === 'RESUME') {
+    return buildResumePrompt(formData, targetOpportunityText);
+  }
 
-  const systemPrompt = `You are OpporHub's Master Career Document Generator.
-Your mission is to generate an exceptional, highly tailored, ATS-optimized ${documentType} based on the user's input and target opportunity context.
+  if (documentType === 'SOP') {
+    return buildSopPrompt(formData, targetOpportunityText);
+  }
 
-CRITICAL INSTRUCTIONS:
-- You MUST output a strictly valid JSON object matching this structure:
+  // Universal Fallback Prompt for other document types enforcing hiring manager standards
+  const systemPrompt = `You are OpporHub's Senior Professional Document Specialist for ${documentType.replace('_', ' ')}.
+Follow the ATS-Safe First Design Rules:
+- Clean structure, hiring manager approved tone.
+- Standard JSON output schema ONLY:
 {
-  "title": string,
+  "title": "Document Title",
   "sections": [
-    {
-      "id": string (unique slug like "summary", "experience", "education", "skills", "projects", "why_us", etc.),
-      "title": string,
-      "type": string ("summary" | "experience" | "education" | "skills" | "projects" | "text" | "bullets"),
-      "content": string | string[],
-      "isComplete": boolean (true if populated),
-      "order": number (1-indexed sequence)
-    }
+    { "id": "sec_1", "title": "Opening & Context", "content": "..." },
+    { "id": "sec_2", "title": "Core Qualifications & Experience", "content": "..." },
+    { "id": "sec_3", "title": "Alignment & Future Impact", "content": "..." },
+    { "id": "sec_4", "title": "Conclusion & Next Steps", "content": "..." }
   ]
-}
-- Do NOT wrap in markdown backticks (no \`\`\`json). Return clean, valid JSON text.
-- Section contents MUST directly incorporate key requirements, skills, and terminology from the Target Opportunity Context if provided.
-- Provide professional, impact-driven content with no placeholder text (e.g. do not write "[Insert Date Here]").`;
+}`;
 
   const userPrompt = `Document Type: ${documentType}
+Target Role/Program/Entity: ${formData.targetTitle || 'Professional Role'}
+Details & Highlights: ${JSON.stringify(formData)}
 
-${targetOpportunityText ? `TARGET OPPORTUNITY CONTEXT (JOB / SCHOLARSHIP / GRANT / INTERNSHIP):\n${targetOpportunityText}\n\n` : ''}USER INPUT DATA:
-${JSON.stringify(formData, null, 2)}
+Target Opportunity Context:
+${targetOpportunityText || 'None provided. Generate high-impact industry standard content.'}
 
-Generate the complete structured JSON document.`;
+Return JSON with "title" and "sections".`;
 
   return { systemPrompt, userPrompt };
 }
