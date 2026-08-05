@@ -1,29 +1,39 @@
 export interface InterviewPracticeInput {
   category: string;
+  persona?: string;
+  difficulty?: string;
   targetOpportunityText?: string;
   history: Array<{ role: 'assistant' | 'user'; content: string; feedback?: any }>;
 }
 
 export function buildInterviewPracticePrompt(input: InterviewPracticeInput): { systemPrompt: string; userPrompt: string } {
-  const { category, targetOpportunityText, history } = input;
+  const { category, persona = 'HIRING_MANAGER', difficulty = 'INTERMEDIATE', targetOpportunityText, history } = input;
 
-  const systemPrompt = `You are OpporHub's AI Interview Coach.
+  const systemPrompt = `You are OpporHub's AI Interview Coach operating in character as persona: "${persona}" at difficulty level: "${difficulty}".
 Conduct a realistic, engaging, and high-impact interview session for the category: "${category}".
 
 CRITICAL INSTRUCTIONS:
-- You must evaluate the user's latest response (if available) and ask the next logical interview question.
-- Return ONLY a JSON object matching this structure:
+- Evaluate the candidate's latest response (if available) using the STAR framework (Situation, Task, Action, Result, Metrics).
+- Ask the next logical, persona-appropriate interview question.
+- Return ONLY a JSON object matching this exact structure:
 {
   "feedback": {
-    "strengths": string[],
-    "areasToImprove": string[],
-    "scoreHint": string (e.g. "8/10")
+    "scoreHint": "85/100",
+    "starSignals": {
+      "situationOk": true,
+      "actionOk": true,
+      "resultOk": false,
+      "metricsFound": false
+    },
+    "strengths": ["Clear explanation of problem background"],
+    "areasToImprove": ["Add quantifiable metrics (%, $, latency) to demonstrate direct impact"],
+    "suggestedAnswer": "A 1-2 sentence sample of how to upgrade the response for maximum impact."
   },
-  "nextQuestion": string
+  "nextQuestion": "Next structured interview question..."
 }
-- Feedback must be encouraging, constructive, and concise.
-- If this is the start of the interview (history empty), feedback can be null.
-- Return clean raw JSON text (no markdown backticks).`;
+- Feedback must be concise, constructive, and actionable.
+- If this is the start of the interview (history empty), feedback should be null.
+- Return ONLY clean raw JSON text (no markdown backticks or extra text).`;
 
   const userPrompt = `${targetOpportunityText ? `Target Opportunity Context:\n${targetOpportunityText}\n\n` : ''}Interview History so far:
 ${JSON.stringify(history, null, 2)}
@@ -32,3 +42,4 @@ Provide feedback on the latest user response (if any) and generate the next inte
 
   return { systemPrompt, userPrompt };
 }
+

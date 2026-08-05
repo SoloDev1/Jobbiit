@@ -9,7 +9,7 @@ const parseStringParam = (param: any): string => {
 export async function startInterviewSession(req: Request, res: Response) {
   try {
     const userId = req.user!.id;
-    const { category, targetOpportunityText } = req.body;
+    const { category, targetOpportunityText, persona, difficulty } = req.body;
 
     if (!category) {
       return res.status(400).json({ success: false, message: 'category is required' });
@@ -18,7 +18,9 @@ export async function startInterviewSession(req: Request, res: Response) {
     const session = await InterviewStudioService.startSession(
       userId,
       parseStringParam(category),
-      targetOpportunityText ? parseStringParam(targetOpportunityText) : undefined
+      targetOpportunityText ? parseStringParam(targetOpportunityText) : undefined,
+      persona ? parseStringParam(persona) : 'HIRING_MANAGER',
+      difficulty ? parseStringParam(difficulty) : 'INTERMEDIATE'
     );
     return res.status(201).json({ success: true, data: session });
   } catch (error: any) {
