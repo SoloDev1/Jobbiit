@@ -1,5 +1,6 @@
 import { buildResumePrompt } from './resume.prompt';
 import { buildSopPrompt } from './sop.prompt';
+import { buildCoverLetterPrompt } from './cover-letter.prompt';
 
 export function buildDocumentGenerationPrompt(
   documentType: string,
@@ -14,10 +15,13 @@ export function buildDocumentGenerationPrompt(
     return buildSopPrompt(formData, targetOpportunityText);
   }
 
+  if (documentType === 'COVER_LETTER') {
+    return buildCoverLetterPrompt(formData, targetOpportunityText);
+  }
+
   // Universal Fallback Prompt for other document types enforcing hiring manager standards
   const systemPrompt = `You are OpporHub's Senior Professional Document Specialist for ${documentType.replace('_', ' ')}.
-Follow the ATS-Safe First Design Rules:
-- Clean structure, hiring manager approved tone.
+Follow standard professional formatting for ${documentType.replace('_', ' ')}:
 - Standard JSON output schema ONLY:
 {
   "title": "Document Title",
