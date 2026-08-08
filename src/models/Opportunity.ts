@@ -373,7 +373,27 @@ export async function getRecommended(
 export async function createOpportunity(
   posterId: string,
   data:     CreateOpportunityInput,
-): Promise<OpportunityDetail> {
+): Promise<OpportunityDetail | 'duplicate'> {
+  const existing = await prisma.opportunity.findFirst({
+    where: {
+      deletedAt: null,
+      OR: [
+        {
+          title:        { equals: data.title.trim(), mode: 'insensitive' },
+          organisation: { equals: data.organisation.trim(), mode: 'insensitive' },
+        },
+        {
+          applyUrl: data.applicationUrl.trim(),
+        },
+      ],
+    },
+    select: { id: true },
+  })
+
+  if (existing) {
+    return 'duplicate'
+  }
+
   const row = await prisma.opportunity.create({
     data: {
       posterId,

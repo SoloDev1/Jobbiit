@@ -166,6 +166,17 @@ export async function createOpportunity(req: Request, res: Response): Promise<vo
   const data = req.body as CreateOpportunityInput
 
   const opp = await OppModel.createOpportunity(userId(req), data)
+
+  if (opp === 'duplicate') {
+    sendError(
+      res,
+      'Duplicate opportunity detected! An opportunity with this title & organization or application URL already exists.',
+      409,
+      'DUPLICATE_OPPORTUNITY',
+    )
+    return
+  }
+
   logger.info({ userId: userId(req), opportunityId: opp.id }, 'Opportunity created')
 
   await audit(req, 'CREATE_OPPORTUNITY', {
