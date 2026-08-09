@@ -124,8 +124,8 @@ export async function getOpportunities(
   }
 
   const where: Prisma.OpportunityWhereInput = {
-    status:   OpportunityStatus.ACTIVE,
-    deadline: { gte: now },
+    status: OpportunityStatus.ACTIVE,
+    OR: [{ deadline: null }, { deadline: { gte: now } }],
     ...(opts.category ? { category: opts.category } : {}),
     ...(opts.isRemote !== undefined ? { isRemote: opts.isRemote } : {}),
     ...(opts.search
@@ -349,8 +349,8 @@ export async function getRecommended(
   const skillIds = profileSkills.map((ps) => ps.skillId)
 
   const where: Prisma.OpportunityWhereInput = {
-    status:   OpportunityStatus.ACTIVE,
-    deadline: { gte: now },
+    status: OpportunityStatus.ACTIVE,
+    OR: [{ deadline: null }, { deadline: { gte: now } }],
     ...(skillIds.length > 0
       ? { skills: { some: { skillId: { in: skillIds } } } }
       : {}),

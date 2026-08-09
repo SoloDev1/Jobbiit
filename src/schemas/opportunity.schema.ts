@@ -9,7 +9,7 @@ const opportunityFields = z.object({
   organisation:    z.string().trim().min(1).max(200),
   description:     z.string().trim().min(1).max(10_000),
   category:        categoryEnum,
-  deadline:        z.coerce.date(),
+  deadline:        z.coerce.date().optional(),
   isRemote:        z.boolean().default(false),
   applicationUrl:  z.string().trim().url().optional(),
   applyUrl:        z.string().trim().url().optional(),

@@ -631,7 +631,7 @@ model Opportunity {
   location        String?
   isRemote        Boolean             @default(false)
   experienceLevel ExperienceLevel?     
-  deadline        DateTime
+  deadline        DateTime?
   applyUrl        String
   status          OpportunityStatus   @default(DRAFT)
   rejectionReason String?
