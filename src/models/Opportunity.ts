@@ -374,6 +374,7 @@ export async function createOpportunity(
   posterId: string,
   data:     CreateOpportunityInput,
 ): Promise<OpportunityDetail | 'duplicate'> {
+  const url = (data.applyUrl || data.applicationUrl || '').trim();
   const existing = await prisma.opportunity.findFirst({
     where: {
       deletedAt: null,
@@ -382,9 +383,7 @@ export async function createOpportunity(
           title:        { equals: data.title.trim(), mode: 'insensitive' },
           organisation: { equals: data.organisation.trim(), mode: 'insensitive' },
         },
-        {
-          applyUrl: data.applicationUrl.trim(),
-        },
+        ...(url ? [{ applyUrl: url }] : []),
       ],
     },
     select: { id: true },
@@ -403,7 +402,8 @@ export async function createOpportunity(
       category:     data.category,
       deadline:     data.deadline,
       isRemote:     data.isRemote,
-      applyUrl:     data.applicationUrl,
+      applyUrl:     url,
+      salary:       data.salary ?? null,
       logoUrl:      data.logoUrl ?? null,
       location:     data.location ?? null,
       status:       OpportunityStatus.PENDING_REVIEW,
@@ -433,7 +433,9 @@ export async function updateOpportunity(
   if (data.category       !== undefined) patch.category     = data.category
   if (data.deadline       !== undefined) patch.deadline     = data.deadline
   if (data.isRemote       !== undefined) patch.isRemote     = data.isRemote
-  if (data.applicationUrl !== undefined) patch.applyUrl     = data.applicationUrl
+  const url = data.applyUrl || data.applicationUrl
+  if (url                 !== undefined) patch.applyUrl     = url
+  if (data.salary         !== undefined) patch.salary       = data.salary
   if (data.logoUrl        !== undefined) patch.logoUrl      = data.logoUrl
   if (data.location       !== undefined) patch.location     = data.location
 
