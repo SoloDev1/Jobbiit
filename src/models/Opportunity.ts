@@ -317,7 +317,7 @@ export async function applyToOpportunity(
     select: { status: true, deadline: true },
   })
   if (!opp) return 'not_found'
-  if (opp.status !== OpportunityStatus.ACTIVE || opp.deadline < new Date()) {
+  if (opp.status !== OpportunityStatus.ACTIVE || (opp.deadline && opp.deadline < new Date())) {
     return 'expired'
   }
 
@@ -400,7 +400,7 @@ export async function createOpportunity(
       organisation: data.organisation,
       description:  data.description,
       category:     data.category,
-      deadline:     data.deadline,
+      deadline:     data.deadline ?? null,
       isRemote:     data.isRemote,
       applyUrl:     url,
       salary:       data.salary ?? null,

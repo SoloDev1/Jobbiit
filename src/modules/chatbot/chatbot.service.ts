@@ -278,7 +278,7 @@ ${jobs
 
       return `Active Database Scholarship Opportunities:
 ${scholarships
-  .map((s) => `- [Scholarship ID: ${s.id}] ${s.title} at ${s.organisation} (Deadline: ${s.deadline.toLocaleDateString()}): ${s.description.substring(0, 150)}...`)
+  .map((s) => `- [Scholarship ID: ${s.id}] ${s.title} at ${s.organisation} (Deadline: ${s.deadline ? s.deadline.toLocaleDateString() : 'No deadline'}): ${s.description.substring(0, 150)}...`)
   .join('\n')}`;
     }
 
@@ -294,7 +294,7 @@ ${scholarships
 
       return `Active Database Grant Opportunities:
 ${grants
-  .map((g) => `- [Grant ID: ${g.id}] ${g.title} at ${g.organisation} (Deadline: ${g.deadline.toLocaleDateString()}): ${g.description.substring(0, 150)}...`)
+  .map((g) => `- [Grant ID: ${g.id}] ${g.title} at ${g.organisation} (Deadline: ${g.deadline ? g.deadline.toLocaleDateString() : 'No deadline'}): ${g.description.substring(0, 150)}...`)
   .join('\n')}`;
     }
 
