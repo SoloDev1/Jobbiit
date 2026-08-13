@@ -7,7 +7,7 @@ const experienceLevelEnum = z.nativeEnum(ExperienceLevel)
 const opportunityFields = z.object({
   title:           z.string().trim().min(1).max(300),
   organisation:    z.string().trim().min(1).max(200),
-  description:     z.string().trim().min(1).max(10_000),
+  description:     z.string().trim().min(1).max(50_000),
   category:        categoryEnum,
   deadline:        z.coerce.date().optional(),
   isRemote:        z.boolean().default(false),
