@@ -86,8 +86,8 @@ app.use(
   }),
 )
 
-app.use(express.json({ limit: '10kb' }))
-app.use(express.urlencoded({ extended: false, limit: '10kb' }))
+app.use(express.json({ limit: '1mb' }))
+app.use(express.urlencoded({ extended: false, limit: '1mb' }))
 app.use(hpp())
 app.use(compression())
 app.use(globalLimiter)
@@ -272,6 +272,14 @@ const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       return void sendError(res, 'File too large', 413, 'FILE_TOO_LARGE')
     }
     return void sendError(res, 'Upload failed', 400, 'UPLOAD_ERROR')
+  }
+
+   if (
+    (err as any)?.type === 'entity.too.large' ||
+    (err as any)?.type === 'PayloadTooLargeError' ||
+    (err as any)?.status === 413
+  ) {
+    return void sendError(res, 'Request payload too large', 413, 'PAYLOAD_TOO_LARGE')
   }
 
   // ── Default ───────────────────────────────────────────────────────────────
