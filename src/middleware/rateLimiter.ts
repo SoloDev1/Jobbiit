@@ -15,20 +15,20 @@ const rateLimitResponse = (message: string) => ({
   message,
 })
 
-// 🌍 1. GLOBAL: General browsing (Feed, Profile viewing)
+// 🌍 1. GLOBAL: General browsing (Feed, Profile viewing, Opportunities)
 export const globalLimiter = rateLimit({
   windowMs: env.RATE_LIMIT_WINDOW || 15 * 60 * 1000,
-  limit: env.RATE_LIMIT_MAX || 100, 
+  limit: env.RATE_LIMIT_MAX || 10000, 
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   store: createRedisStore('global'),
   message: rateLimitResponse('Too many requests, please try again later.'),
 })
 
-// 🛡️ 2. AUTH: Signup/Login/Password (High Security)
+// 🛡️ 2. AUTH: Signup/Login/Password (High Security & High Scalability)
 export const strictAuthLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 10, // 10 attempts per 15 mins is safer for brute-force
+  limit: 2000, // 2000 attempts per 15 mins to support large bursts on shared Wi-Fi/NAT
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   store: createRedisStore('auth'),
@@ -38,7 +38,7 @@ export const strictAuthLimiter = rateLimit({
 /** OTP forgot-password: max 3 requests per 15 minutes per IP + email. */
 export const forgotPasswordOtpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 3,
+  limit: 10,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   store: createRedisStore('forgot-password'),
@@ -57,16 +57,16 @@ export const forgotPasswordOtpLimiter = rateLimit({
 
 export const socialActionLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  limit: 30, // Max 30 likes/posts per minute
+  limit: 100, // Max 100 actions per minute
   store: createRedisStore('social'),
-  message: rateLimitResponse('You are liking posts too fast!'),
+  message: rateLimitResponse('You are interacting too fast!'),
 })
 
 
 // 🔄 3. SESSION: Token Refreshing (Background Activity)
 export const sessionLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 50, // Higher limit for background sync/refresh
+  limit: 5000, // High limit for background sync/refresh across large user bases
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   store: createRedisStore('session'),
