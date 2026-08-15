@@ -13,14 +13,23 @@ import {
 } from '../schemas/profile.schema'
 import * as ProfileController from '../controllers/profile.controller'
 
+import { sendError } from '../utils/apiResponse'
+
 const router = Router()
 
 const cvLimit = rateLimit({
   windowMs: 24 * 60 * 60 * 1000, // 24 hours
   max: 3, // Limit each IP to 3 requests per day
-  message: 'Daily CV upload limit reached.',
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (_req, res) => {
+    sendError(
+      res,
+      'You have reached your daily limit of 3 CV uploads. Please try again tomorrow or edit your profile manually.',
+      429,
+      'DAILY_LIMIT_EXCEEDED',
+    )
+  },
 })
 
 const uploadCvFile = multer({
