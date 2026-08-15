@@ -3,16 +3,10 @@ import { z } from 'zod'
 // One regex validates all password rules at once.
 // The error message is intentionally generic — revealing which individual
 // rule failed would help attackers enumerate the policy.
-const PASSWORD_REQUIREMENTS =
-  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).+$/
-
 const signupPasswordField = z
   .string()
-  .min(8,  'Password does not meet requirements')
-  .max(72, 'Password does not meet requirements')
-  .refine((val) => PASSWORD_REQUIREMENTS.test(val), {
-    message: 'Password does not meet requirements',
-  })
+  .min(8,  'Password must be at least 8 characters')
+  .max(72, 'Password cannot exceed 72 characters')
 
 export const signupSchema = z
   .object({
@@ -23,6 +17,8 @@ export const signupSchema = z
       .email('Invalid email address'),
 
     password: signupPasswordField,
+    firstName: z.string().trim().max(50).optional(),
+    lastName: z.string().trim().max(50).optional(),
   })
   .strict()
 

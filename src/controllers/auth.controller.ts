@@ -58,7 +58,12 @@ function userAuthPayload(u: {
 // ─── signup ───────────────────────────────────────────────────────────────────
 
 export async function signup(req: Request, res: Response): Promise<void> {
-  const { email, password } = req.body as { email: string; password: string }
+  const { email, password, firstName, lastName } = req.body as {
+    email: string
+    password: string
+    firstName?: string
+    lastName?: string
+  }
 
   // Fail fast before hashing — but keep message generic.
   const existing = await UserModel.findByEmail(email)
@@ -88,8 +93,8 @@ export async function signup(req: Request, res: Response): Promise<void> {
     await tx.profile.create({
       data: {
         userId: createdUser.id,
-        firstName: 'New',
-        lastName: 'User',
+        firstName: firstName?.trim() || 'New',
+        lastName: lastName?.trim() || 'User',
         headline: 'New member',
       },
       select: { id: true },
