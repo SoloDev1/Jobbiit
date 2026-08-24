@@ -79,19 +79,28 @@ function mapRow <T extends {
     applications: { userId: string }[]
     likes:        { userId: string }[]
   } & Record<string, unknown>,
->(row: T, viewerId: string): Omit<T, 'savedBy' | 'applications' | 'likes'> & { isSavedByUser: boolean; isAppliedByUser: boolean; likeCount: number; isLikedByUser: boolean } {
+>(row: T, viewerId?: string): Omit<T, 'savedBy' | 'applications' | 'likes'> & { isSavedByUser: boolean; isAppliedByUser: boolean; likeCount: number; isLikedByUser: boolean } {
   const { savedBy, applications, likes, ...rest } = row
   return {
     ...rest,
-    isSavedByUser:   savedBy.length > 0,
-    isAppliedByUser: applications.length > 0,
+    isSavedByUser:   viewerId ? savedBy.length > 0 : false,
+    isAppliedByUser: viewerId ? applications.length > 0 : false,
     likeCount:       (rest._count as any)?.likes ?? 0,
-    isLikedByUser:   likes.length > 0,
+    isLikedByUser:   viewerId ? likes.length > 0 : false,
   } as any
 }
 
-// AFTER
-function viewerIncludes(viewerId: string) {
+function viewerIncludes(viewerId?: string) {
+  if (!viewerId) {
+    return {
+      poster:       posterSelect,
+      savedBy:      { where: { userId: '__anonymous__' }, take: 0 },
+      applications: { where: { userId: '__anonymous__' }, take: 0, select: { userId: true } },
+      likes:        { where: { userId: '__anonymous__' }, take: 0, select: { userId: true } },
+      _count:       { select: { applications: true, comments: true, likes: true } },
+    } as const
+  }
+
   return {
     poster:       posterSelect,
     savedBy:      { where: { userId: viewerId }, take: 1 },
@@ -104,7 +113,7 @@ function viewerIncludes(viewerId: string) {
 // ─── getOpportunities ─────────────────────────────────────────────────────────
 
 export async function getOpportunities(
-  viewerId: string,
+  viewerId: string | undefined,
   opts: {
     category?: OpportunityCategory
     isRemote?: boolean
@@ -155,9 +164,16 @@ export async function getOpportunities(
 
   const hasMore = rows.length > opts.limit
   const slice   = hasMore ? rows.slice(0, opts.limit) : rows
-  const opportunities = slice.map((r) =>
-    mapRow(r as unknown as Parameters<typeof mapRow>[0], viewerId),
-  ) as unknown as OpportunitySummary[]
+  const opportunities = slice.map((r) => {
+    const mapped = mapRow(r as unknown as Parameters<typeof mapRow>[0], viewerId)
+    if (!viewerId) {
+      return {
+        ...mapped,
+        applyUrl: null,
+      }
+    }
+    return mapped
+  }) as unknown as OpportunitySummary[]
 
   const last = slice[slice.length - 1]
   const nextCursor = hasMore && last ? encodeCursor(last.createdAt, last.id) : null
@@ -167,7 +183,7 @@ export async function getOpportunities(
 
 // ─── Match calculation helper ────────────────────────────────────────────────
 export async function calculateOpportunityMatch(
-  userId: string,
+  userId: string | undefined,
   opportunity: {
     id: string
     category: OpportunityCategory
@@ -175,6 +191,13 @@ export async function calculateOpportunityMatch(
     organisation: string
   }
 ): Promise<{ matchScore: number; matchReason: string }> {
+  if (!userId) {
+    return {
+      matchScore: 88,
+      matchReason: `Sign in to calculate your personalized profile match for ${opportunity.organisation}.`,
+    }
+  }
+
   try {
     const profile = await prisma.profile.findUnique({
       where: { userId },
@@ -251,7 +274,7 @@ export async function calculateOpportunityMatch(
 
 export async function getOpportunityById(
   id:       string,
-  viewerId: string,
+  viewerId?: string,
 ): Promise<OpportunityDetail | null> {
   const row = await prisma.opportunity.findUnique({
     where:   { id },
@@ -273,6 +296,7 @@ export async function getOpportunityById(
 
   return {
     ...detail,
+    applyUrl: viewerId ? detail.applyUrl : (null as any),
     matchScore: matchData.matchScore,
     matchReason: matchData.matchReason,
   }

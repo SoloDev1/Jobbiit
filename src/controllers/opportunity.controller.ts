@@ -30,6 +30,10 @@ function userId(req: Request): string {
   return req.user!.id
 }
 
+function optionalUserId(req: Request): string | undefined {
+  return req.user?.id
+}
+
 // ─── getOpportunities ─────────────────────────────────────────────────────────
 
 export async function getOpportunities(req: Request, res: Response): Promise<void> {
@@ -45,7 +49,7 @@ export async function getOpportunities(req: Request, res: Response): Promise<voi
     return
   }
 
-  const { opportunities, nextCursor } = await OppModel.getOpportunities(userId(req), {
+  const { opportunities, nextCursor } = await OppModel.getOpportunities(optionalUserId(req), {
     category,
     isRemote,
     search,
@@ -65,7 +69,7 @@ export async function getOpportunityById(req: Request, res: Response): Promise<v
     return
   }
 
-  const opp = await OppModel.getOpportunityById(parsed.data, userId(req))
+  const opp = await OppModel.getOpportunityById(parsed.data, optionalUserId(req))
   if (!opp) {
     sendError(res, 'Opportunity not found', 404, 'NOT_FOUND')
     return
@@ -76,8 +80,11 @@ export async function getOpportunityById(req: Request, res: Response): Promise<v
     description: OpportunityCleanerService.sanitizeDescription(opp.description),
   };
 
-  // Sync view event & career memory asynchronously
-  CareerMemorySyncService.syncOpportunityInteraction(userId(req), parsed.data, 'VIEW_OPPORTUNITY');
+  // Sync view event & career memory asynchronously if user is logged in
+  const currentUserId = optionalUserId(req)
+  if (currentUserId) {
+    CareerMemorySyncService.syncOpportunityInteraction(currentUserId, parsed.data, 'VIEW_OPPORTUNITY');
+  }
 
   sendSuccess(res, sanitizedOpp, 'Opportunity loaded')
 }

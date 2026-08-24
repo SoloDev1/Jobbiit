@@ -172,7 +172,7 @@ Return a JSON object with: executiveSummary, academicBackground, researchInteres
 
         return {
           docType: 'scholarship',
-          title: `Academic Fellowship Statement — ${fullName}`,
+          title: `Academic Fellowship Statement - ${fullName}`,
           applicant: { fullName, email, academicField: memory?.academicField || '' },
           ...essay,
         };
@@ -180,7 +180,7 @@ Return a JSON object with: executiveSummary, academicBackground, researchInteres
         logger.warn({ error: err.message, intent }, 'LLM scholarship generation failed');
         return {
           docType: 'scholarship',
-          title: `Academic Fellowship Statement — ${fullName}`,
+          title: `Academic Fellowship Statement - ${fullName}`,
           applicant: { fullName, email, academicField: memory?.academicField || '' },
           executiveSummary: candidateSummary,
         };

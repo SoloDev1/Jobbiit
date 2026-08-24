@@ -112,13 +112,13 @@ export async function sendWelcomeEmail(to: string): Promise<void> {
     subject: 'Welcome to OpporLink',
     html: `
       <p>Hi,</p>
-      <p>Welcome to OpporLink — your account is ready.</p>
+      <p>Welcome to OpporLink! Your account is ready.</p>
       <p>You can open the app to finish onboarding and start discovering opportunities.</p>
     `.trim(),
     text: [
       'Hi,',
       '',
-      'Welcome to OpporLink — your account is ready.',
+      'Welcome to OpporLink! Your account is ready.',
       '',
       'You can open the app to finish onboarding and start discovering opportunities.',
     ].join('\n'),
