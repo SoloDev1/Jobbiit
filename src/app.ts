@@ -347,9 +347,21 @@ async function shutdown(signal: string): Promise<void> {
 process.on('SIGTERM', () => { void shutdown('SIGTERM') })
 process.on('SIGINT',  () => { void shutdown('SIGINT') })
 
-// Treat unhandled async failures and uncaught exceptions as fatal.
-// Log and exit so the process manager (Docker, PM2, etc.) can restart cleanly.
-process.on('unhandledRejection', (err) => {
+// Treat unhandled async failures and uncaught exceptions as fatal, while
+// isolating transient Redis/rate-limiter store rejections so they don't take down the server.
+process.on('unhandledRejection', (err: any) => {
+  const isRedisError =
+    err?.name === 'RedisError' ||
+    err?.name === 'ReplyError' ||
+    err?.name === 'ClusterError' ||
+    typeof err?.message === 'string' &&
+      (err.message.includes('Redis') || err.message.includes('ECONNRESET') || err.message.includes('ETIMEDOUT'))
+
+  if (isRedisError) {
+    logger.error({ err }, '[Process] Transient Redis/network rejection intercepted; skipping process exit')
+    return
+  }
+
   logger.fatal({ err }, 'Unhandled promise rejection')
   process.exit(1)
 })
@@ -358,3 +370,4 @@ process.on('uncaughtException', (err) => {
   logger.fatal({ err }, 'Uncaught exception')
   process.exit(1)
 })
+

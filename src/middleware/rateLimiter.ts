@@ -37,6 +37,7 @@ export const userKeyGenerator = (req: Request): string => {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // 🌐 LAYER 1: Global Infrastructure Safety Net (Protects DB Connection Pool)
 // ─────────────────────────────────────────────────────────────────────────────
 export const globalInfrastructureLimiter = rateLimit({
@@ -44,6 +45,7 @@ export const globalInfrastructureLimiter = rateLimit({
   limit: env.RATE_LIMIT_MAX || 10000,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  passOnStoreError: true,
   store: createRedisStore('global'),
   message: rateLimitResponse('Too many requests, please try again later.', 'GLOBAL_RATE_LIMIT'),
 })
@@ -64,6 +66,7 @@ export const accountLoginLimiter = rateLimit({
   skipSuccessfulRequests: true, // Only count 4xx / failed credentials
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  passOnStoreError: true,
   store: createRedisStore('auth:acc-login'),
   keyGenerator: (req: Request) => `acc:${hashTargetIdentifier(req)}`,
   message: rateLimitResponse(
@@ -81,6 +84,7 @@ export const ipAuthLimiter = rateLimit({
   limit: 100, // 100 attempts per IP per 15 min
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  passOnStoreError: true,
   store: createRedisStore('auth:ip-origin'),
   keyGenerator: (req: Request) => `ip:${ipKeyGenerator(req.ip ?? '')}`,
   message: rateLimitResponse(
@@ -99,6 +103,7 @@ export const otpTargetLimiter = rateLimit({
   limit: 5, // 5 OTP triggers per 15 minutes per target email + IP
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  passOnStoreError: true,
   store: createRedisStore('otp:target'),
   keyGenerator: (req: Request) =>
     `otp:${ipKeyGenerator(req.ip ?? '')}:${hashTargetIdentifier(req)}`,
@@ -122,6 +127,7 @@ export const readTierLimiter = rateLimit({
   limit: 100,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  passOnStoreError: true,
   store: createRedisStore('tier:read'),
   keyGenerator: userKeyGenerator,
   message: rateLimitResponse('You are browsing too quickly. Slow down.', 'READ_LIMIT_EXCEEDED'),
@@ -136,6 +142,7 @@ export const writeTierLimiter = rateLimit({
   limit: 25,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  passOnStoreError: true,
   store: createRedisStore('tier:write'),
   keyGenerator: userKeyGenerator,
   message: rateLimitResponse('You are interacting too fast. Please slow down.', 'WRITE_LIMIT_EXCEEDED'),
@@ -152,6 +159,7 @@ export const criticalMutationLimiter = rateLimit({
   limit: 10,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  passOnStoreError: true,
   store: createRedisStore('tier:critical'),
   keyGenerator: userKeyGenerator,
   message: rateLimitResponse(
@@ -170,6 +178,7 @@ export const aiRateLimiter = rateLimit({
   limit: 10,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  passOnStoreError: true,
   store: createRedisStore('tier:ai'),
   keyGenerator: userKeyGenerator,
   message: rateLimitResponse(
@@ -186,6 +195,7 @@ export const sessionLimiter = rateLimit({
   limit: 5000,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  passOnStoreError: true,
   store: createRedisStore('session'),
   keyGenerator: userKeyGenerator,
   message: rateLimitResponse('Session sync busy. Please wait.', 'SESSION_SYNC_BUSY'),
